@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, Clock, Play, Square, Minus, Plus } from 'lucide-react';
+import { Send, ChevronUp, ChevronDown, Clock, Play, Square } from 'lucide-react';
 import { ref, push, onValue, runTransaction, update, set } from 'firebase/database';
 import { db } from '../lib/firebase';
 
@@ -17,10 +17,8 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const [endTime, setEndTime] = useState(0);
 
   const chatEndRef = useRef(null);
-  
-  // REFS (These hold the "Fresh" values for the timer logic)
+  const chatContainerRef = useRef(null);
   const isAuctionActiveRef = useRef(false);
-  const currentBidRef = useRef(0); // <--- NEW FIX
 
   // --- 1. SYNC WITH FIREBASE ---
   useEffect(() => {
@@ -44,11 +42,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
     const unsubBid = onValue(bidRef, (snapshot) => {
       const price = snapshot.val() || 0;
-      
-      // Update State (For UI)
       setCurrentBid(price);
-      // Update Ref (For Timer Logic) <--- FIX
-      currentBidRef.current = price;
       
       setCustomBid((prev) => {
           const minNextBid = price + 10;
@@ -60,23 +54,18 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     return () => { unsubChat(); unsubBid(); unsubAuction(); };
   }, [roomId]);
 
-  // --- 2. COUNTDOWN TIMER ---
+  // --- 2. TIMER ---
   useEffect(() => {
       if (!isAuctionActive || !endTime) {
           setTimeLeft(30);
           return;
       }
-
       const interval = setInterval(() => {
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
           setTimeLeft(remaining);
-
-          if (remaining === 0 && isHost) {
-              stopAuction();
-          }
+          if (remaining === 0 && isHost) stopAuction();
       }, 100);
-
       return () => clearInterval(interval);
   }, [isAuctionActive, endTime, isHost]);
 
@@ -101,7 +90,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     setInput("");
   };
 
-  // Host Controls
+  // --- HOST CONTROLS ---
   const handlePriceChange = (e) => {
       if (isAuctionActive) return; 
       const valStr = e.target.value;
@@ -120,7 +109,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       set(ref(db, `rooms/${roomId}/bid`), Math.max(0, currentBid + amount));
   };
 
-  // Viewer Controls
+  // --- VIEWER CONTROLS ---
   const handleIncrease = () => setCustomBid(prev => prev + 10);
   const handleDecrease = () => {
       if (customBid > currentBid + 10) setCustomBid(prev => prev - 10);
@@ -150,15 +139,8 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           "auction/isActive": false,
           "auction/endTime": 0
       });
-
-      // FIX: Read from the Ref (Fresh Value) instead of State (Stale Value)
-      const finalPrice = currentBidRef.current; 
-
-      if (isAuctionActiveRef.current) { 
-        push(ref(db, `rooms/${roomId}/chat`), { 
-            text: `🛑 SOLD FOR ₹${finalPrice}`, 
-            type: 'bid' 
-        });
+      if (isAuctionActive) { 
+        push(ref(db, `rooms/${roomId}/chat`), { text: `🛑 SOLD FOR ₹${currentBid}`, type: 'bid' });
       }
   };
 
@@ -170,8 +152,9 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   return (
     <div className="absolute inset-0 z-20 flex flex-col justify-end pb-20 px-4 pointer-events-none overflow-hidden">
       
-      {/* --- TOP RIGHT: PRICE --- */}
+      {/* --- TOP RIGHT: PRICE DISPLAY (FIXED WIDTH) --- */}
       <div className="absolute top-24 right-4 pointer-events-auto flex flex-col items-end gap-2">
+          
           <div className={`
               backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative
               ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}
@@ -181,6 +164,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
               </span>
 
               <div className="flex items-center justify-end gap-1 w-full">
+                  {/* HOST MANUAL ARROWS */}
                   {isHost && !isAuctionActive && (
                       <div className="flex flex-col gap-0.5 mr-2">
                           <button onClick={() => manualStep(10)} className="text-white hover:text-dibs-neon active:scale-90 bg-white/10 rounded p-0.5">
@@ -203,12 +187,14 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                             disabled={isAuctionActive}
                             step="10"
                             placeholder="0"
+                            // FIX: Increased width to w-32 to accommodate large numbers
                             className={`
                                 w-32 bg-transparent text-right font-display font-black text-4xl outline-none p-0 m-0 placeholder:text-white/20
                                 ${isAuctionActive ? 'text-white' : 'text-white border-b border-dashed border-white/20'}
                             `}
                           />
                       ) : (
+                          // FIX: Ensure tabular-nums prevents jumping characters
                           <span className="text-4xl font-display font-black text-white tabular-nums tracking-tighter">
                               {currentBid}
                           </span>
@@ -217,6 +203,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
               </div>
           </div>
 
+          {/* TIMER */}
           {isAuctionActive && (
               <motion.div 
                 initial={{ scale: 0.8, opacity: 0 }}
