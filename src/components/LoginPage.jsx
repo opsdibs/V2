@@ -40,9 +40,9 @@ export const LoginPage = () => {
 
     // 2. HOST GATEKEEPING
     if (role === 'host') {
-        const allowedHost = import.meta.env.VITE_HOST_EMAIL; // <--- NEW
+        const allowedHost = import.meta.env.VITE_HOST_EMAIL || "ops@brownietech.in";
         
-        if (email.toLowerCase() !== allowedHost) {
+        if (email.toLowerCase() !== allowedHost.toLowerCase()) {
             alert("ACCESS DENIED: Unauthorized Host Email");
             navigate('/'); 
             return;
@@ -64,7 +64,6 @@ export const LoginPage = () => {
         });
 
         // 4. SUCCESS -> NAVIGATE TO ROOM
-        // We pass the userId in state or url if needed later, but for now just entry
         navigate(`/room/${roomId}?role=${role}`);
 
     } catch (err) {
@@ -75,11 +74,8 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="w-full h-screen bg-black text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="w-full h-screen bg-[#FF6600] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
       
-      {/* Background Decor */}
-      <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-600 to-black"></div>
-
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -90,7 +86,7 @@ export const LoginPage = () => {
             <h1 className="font-display font-black text-4xl tracking-tighter uppercase">
                 {role === 'host' ? 'Host Access' : 'Viewer Entry'}
             </h1>
-            <p className="font-mono text-xs text-zinc-500 uppercase tracking-widest">
+            <p className="font-mono text-xs text-white/80 uppercase tracking-widest">
                 {role === 'host' ? 'Restricted Area' : 'Enter Details to Join'}
             </p>
         </div>
@@ -100,30 +96,30 @@ export const LoginPage = () => {
             
             {/* Email Input */}
             <div className="space-y-1">
-                <label className="text-[10px] font-mono text-zinc-500 uppercase ml-2">Email Address</label>
+                <label className="text-[10px] font-mono text-white uppercase ml-2">Email Address</label>
                 <div className="relative group">
-                    <Mail className="absolute left-4 top-3.5 w-4 h-4 text-zinc-500 group-focus-within:text-white transition-colors" />
+                    <Mail className="absolute left-4 top-3.5 w-4 h-4 text-white" />
                     <input 
                         type="email" 
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="name@example.com"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-mono focus:outline-none focus:border-white transition-colors placeholder:text-zinc-700"
+                        className="w-full bg-white/20 border border-white rounded-xl py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 transition-colors placeholder:text-white/50"
                     />
                 </div>
             </div>
 
             {/* Phone Input */}
             <div className="space-y-1">
-                <label className="text-[10px] font-mono text-zinc-500 uppercase ml-2">Phone Number</label>
+                <label className="text-[10px] font-mono text-white uppercase ml-2">Phone Number</label>
                 <div className="relative group">
-                    <Phone className="absolute left-4 top-3.5 w-4 h-4 text-zinc-500 group-focus-within:text-white transition-colors" />
+                    <Phone className="absolute left-4 top-3.5 w-4 h-4 text-white" />
                     <input 
                         type="tel" 
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         placeholder="9876543210"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-mono focus:outline-none focus:border-white transition-colors placeholder:text-zinc-700"
+                        className="w-full bg-white/20 border border-white rounded-xl py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 transition-colors placeholder:text-white/50"
                     />
                 </div>
             </div>
@@ -135,7 +131,7 @@ export const LoginPage = () => {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="flex items-center gap-2 text-red-500 bg-red-950/30 p-3 rounded-lg border border-red-900/50"
+                        className="flex items-center gap-2 text-white bg-white/20 p-3 rounded-lg border border-white"
                     >
                         <AlertCircle className="w-4 h-4" />
                         <span className="text-xs font-bold uppercase">{error}</span>
@@ -147,7 +143,7 @@ export const LoginPage = () => {
             <button 
                 type="submit"
                 disabled={loading}
-                className="w-full bg-white text-black font-black uppercase tracking-widest py-4 rounded-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mt-4"
+                className="w-full bg-white text-[#FF6600] font-black uppercase tracking-widest py-4 rounded-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 shadow-lg"
             >
                 {loading ? (
                     <span className="animate-pulse">Verifying...</span>

@@ -25,23 +25,30 @@ export const LiveRoom = ({ roomId, isHost }) => {
   const isRunning = useRef(false);
 
   useEffect(() => {
-    // Lock to prevent double-execution in Strict Mode
     if (isRunning.current) return;
     isRunning.current = true;
 
     // LOCAL VARIABLES (Prevent Null Crash)
     let myClient = null;
+    let myTracks = { audio: null, video: null };
     let isActive = true;
 
     const initAgora = async () => {
       try {
         setStatus("CONNECTING...");
         
-        // 1. CREATE CLIENT
+        // 1. Create Client & SYNC REF IMMEDIATELY
         myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
-        clientRef.current = myClient; // <--- ASSIGNED HERE
+        clientRef.current = myClient; 
 
-        // 2. SETUP LISTENERS
+        if (isHost) {
+          await myClient.setClientRole("host");
+          try { setCameras(await AgoraRTC.getCameras()); } catch (e) {}
+        } else {
+          await myClient.setClientRole("audience", { level: 2 });
+        }
+
+        // 2. Listeners
         myClient.on("user-published", async (user, mediaType) => {
           if (!isActive) return;
           await myClient.subscribe(user, mediaType);
@@ -61,43 +68,37 @@ export const LiveRoom = ({ roomId, isHost }) => {
              if (mediaType === 'video') setIsStreaming(false);
         });
 
-        // 3. SETUP HOST/AUDIENCE
-        if (isHost) {
-          await myClient.setClientRole("host");
-          try { setCameras(await AgoraRTC.getCameras()); } catch (e) {}
-        } else {
-          await myClient.setClientRole("audience", { level: 2 });
-        }
-
-        // 4. JOIN
+        // 3. Join
         await myClient.join(AGORA_APP_ID, roomId, AGORA_TOKEN, null);
         if (isActive) setJoined(true);
 
-        // 5. HOST CAMERA
+        // 4. Host Setup
         if (isHost) {
           setStatus("STARTING CAMERA...");
-          
-          // Smart Resolution: Try HD, Fallback to SD
-          let tracks;
+          // Smart Resolution (HD -> SD)
           try {
-             tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+             const [mic, cam] = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
-                 { encoderConfig: "720p_1" } 
+                 { encoderConfig: "720p_1" }
              );
+             myTracks = { audio: mic, video: cam };
           } catch (e) {
-             console.warn("HD failed, retrying SD...");
-             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+             // Fallback
+             const [mic, cam] = await AgoraRTC.createMicrophoneAndCameraTracks();
+             myTracks = { audio: mic, video: cam };
           }
 
-          const [mic, cam] = tracks;
+          if (!isActive) { 
+              myTracks.audio?.close(); 
+              myTracks.video?.close(); 
+              return; 
+          }
 
-          if (!isActive) { mic.close(); cam.close(); return; }
-
-          localTracksRef.current = { audio: mic, video: cam };
+          localTracksRef.current = myTracks; // SYNC REF
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
-              cam.play(localContainer);
+              myTracks.video.play(localContainer);
               setVideoReady(true);
               setStatus("READY TO AIR");
           }
@@ -116,7 +117,7 @@ export const LiveRoom = ({ roomId, isHost }) => {
     // CLEANUP
     return () => {
       isActive = false;
-      isRunning.current = false;
+      isRunning.current = false; // Allow re-run if component remounts
       
       const cleanup = async () => {
           if (localTracksRef.current.audio) localTracksRef.current.audio.close();
@@ -127,8 +128,11 @@ export const LiveRoom = ({ roomId, isHost }) => {
               await myClient.leave().catch(() => {});
               myClient.removeAllListeners();
           }
-          // FIX: REMOVED THE LINE THAT SETS clientRef.current = null
-          // We let the ref persist to ensure buttons always have a target.
+          
+          // Safe Cleanup: Only clear ref if it matches our local client
+          if (clientRef.current === myClient) {
+              clientRef.current = null;
+          }
       };
       cleanup();
     };
@@ -136,12 +140,10 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
   // --- TOGGLE STREAMING ---
   const handleToggleStream = async () => {
-      // Debugging Logic
+      console.log("Button Clicked"); 
+
       if (!clientRef.current) {
-          console.error("CRITICAL: Client Ref is null. Attempting recovery...");
-          // Fallback: If ref is dead but we are here, user is likely seeing video.
-          // We can't recover the client object easily without a restart.
-          alert("Connection State Error. Please refresh the page.");
+          console.error("Client Ref is null");
           return;
       }
 
@@ -261,7 +263,7 @@ export const LiveRoom = ({ roomId, isHost }) => {
             </div>
         </div>
 
-        {/* Host Stream Trigger */}
+        {/* Host Stream Trigger - MERGED UI CHANGE (Direct Position) */}
         {isHost && videoReady && !isStreaming && (
             <button 
                 onClick={handleToggleStream}

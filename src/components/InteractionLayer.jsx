@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, Clock, Play, Square, Eye } from 'lucide-react';
-import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove } from 'firebase/database';
+import { Send, ChevronUp, ChevronDown, Clock, Play, Square, Eye } from 'lucide-react'; 
+import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database'; 
 import { db } from '../lib/firebase';
 
 // --- DATABASE OF NAMES ---
@@ -48,7 +48,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const chatEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   
-  // Logic Refs
+  // Logic Refs (Fixes Stale State)
   const isAuctionActiveRef = useRef(false);
   const currentBidRef = useRef(0); 
 
@@ -108,8 +108,10 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       if (!isHost) {
           const userId = Math.random().toString(36).substring(2, 15);
           const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
+          
           set(myPresenceRef, true);
           onDisconnect(myPresenceRef).remove();
+          
           return () => { remove(myPresenceRef); };
       }
   }, [roomId, isHost]);
@@ -124,6 +126,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
           setTimeLeft(remaining);
+
           if (remaining === 0 && isHost) {
               stopAuction();
           }
@@ -144,7 +147,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     e.preventDefault();
     if (!input.trim()) return;
     push(ref(db, `rooms/${roomId}/chat`), {
-      user: username, // Use assigned username
+      user: username,
       text: input,
       isHost,
       type: 'msg'
@@ -176,13 +179,18 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const placeBid = () => {
     if (!isAuctionActive) return; 
     const bidRef = ref(db, `rooms/${roomId}/bid`);
-    
+    const lastBidderRef = ref(db, `rooms/${roomId}/lastBidder`);
+
     runTransaction(bidRef, (current) => {
       const safeCurrent = current || 0;
-      return customBid > safeCurrent ? customBid : undefined;
+      if (customBid > safeCurrent) return customBid;
+      return;
+    }).then((result) => {
+        if (result.committed) {
+            set(lastBidderRef, username);
+        }
     });
 
-    // UPDATED: Use the specific format requested
     push(ref(db, `rooms/${roomId}/chat`), {
         text: `${username} bid ₹${customBid}`,
         type: 'bid'
@@ -196,7 +204,8 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
       update(ref(db, `rooms/${roomId}`), {
           "auction/isActive": true,
-          "auction/endTime": newEndTime
+          "auction/endTime": newEndTime,
+          "lastBidder": null 
       });
 
       push(ref(db, `rooms/${roomId}/chat`), {
@@ -205,12 +214,16 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       });
   };
 
-  const stopAuction = () => {
+  const stopAuction = async () => {
       const finalPrice = currentBidRef.current;
 
       if (isAuctionActiveRef.current) { 
+        // Fetch winner name
+        const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
+        const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
+
         push(ref(db, `rooms/${roomId}/chat`), {
-            text: `🛑 SOLD FOR ₹${finalPrice}`,
+            text: `🛑 ${winnerName} CALLED DIBS FOR ₹${finalPrice}!`,
             type: 'bid'
         });
       }
@@ -248,6 +261,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
               </span>
 
               <div className="flex items-center justify-end gap-1 w-full">
+                  {/* Host Manual Arrows */}
                   {isHost && !isAuctionActive && (
                       <div className="flex flex-col gap-0.5 mr-2">
                           <button onClick={() => manualStep(10)} className="text-white hover:text-dibs-neon active:scale-90 bg-white/10 rounded p-0.5">
@@ -322,8 +336,8 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                     }`}
                 >
                     <span className="font-bold opacity-70 text-[10px] mr-2 block">
-                        {/* UPDATED: Only show label if it's NOT a bid msg (since bid msg includes name now) */}
-                        {msg.type === 'bid' ? '💸' : msg.user}
+                        {/* Show generic label for system messages (bids), Show Username for Chats */}
+                        {msg.type === 'bid' ? '🔔 UPDATE' : msg.user}
                     </span>
                     {msg.text}
                 </motion.div>
