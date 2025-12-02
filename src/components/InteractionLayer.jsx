@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, Clock, Play, Square, Eye } from 'lucide-react'; 
+import { Send, ChevronUp, ChevronDown, Clock, Play, Square, Eye, ShoppingBag } from 'lucide-react'; 
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database'; 
 import { db } from '../lib/firebase';
 
-// --- DATABASE OF NAMES ---
+// --- INVENTORY ---
+const INVENTORY = [
+  { id: 101, name: "Vintage Levi's 501", desc: "Size 32, Light Wash, 90s", startPrice: 100 },
+  { id: 102, name: "Nike Windbreaker", desc: "Size L, Teal/Purple, Mint", startPrice: 200 },
+  { id: 103, name: "Carhartt Detroit", desc: "Size XL, Distressed, Tan", startPrice: 250 },
+  { id: 104, name: "Band Tee (Nirvana)", desc: "Size M, Faded Black", startPrice: 120 },
+];
+
 const quirky_usernames = [
     "Thrift_Shift", "Holy_Shift_Dress", "Thrifty_Cent", "Fit_Check_Mate", "Pop_The_Tags",
     "Deja_Shoe", "Second_Hand_Stan", "Re_Wear_It", "Shifty_Thrifty", "Oh_Crop_Top",
@@ -29,7 +36,6 @@ const quirky_usernames = [
 ];
 
 export const InteractionLayer = ({ roomId, isHost }) => {
-  // UI State
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [currentBid, setCurrentBid] = useState(0);
@@ -37,19 +43,20 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const [viewerCount, setViewerCount] = useState(0);
   const [username, setUsername] = useState("");
   
-  // Auction State
   const [isAuctionActive, setIsAuctionActive] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30); 
   const [endTime, setEndTime] = useState(0);
+  
+  const [currentItemId, setCurrentItemId] = useState(null);
+  const [showInventory, setShowInventory] = useState(false);
 
-  // REFS
   const chatEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const isAuctionActiveRef = useRef(false);
   const currentBidRef = useRef(0); 
-  const stopTriggeredRef = useRef(false); // NEW: Prevents double-stopping
+  const currentItemRef = useRef(null); 
 
-  // --- 0. ASSIGN USERNAME ---
+  // --- SYNC LOGIC ---
   useEffect(() => {
       if (isHost) {
           setUsername("HOST");
@@ -59,12 +66,12 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       }
   }, [isHost]);
 
-  // --- 1. SYNC WITH FIREBASE ---
   useEffect(() => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const auctionRef = ref(db, `rooms/${roomId}/auction`);
     const viewersRef = ref(db, `rooms/${roomId}/viewers`);
+    const itemRef = ref(db, `rooms/${roomId}/currentItem`);
 
     const unsubChat = onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
@@ -77,11 +84,6 @@ export const InteractionLayer = ({ roomId, isHost }) => {
             setIsAuctionActive(data.isActive);
             isAuctionActiveRef.current = data.isActive; 
             setEndTime(data.endTime || 0);
-            
-            // If auction becomes active, reset the stop trigger
-            if (data.isActive) {
-                stopTriggeredRef.current = false;
-            }
         }
     });
 
@@ -89,7 +91,6 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       const price = snapshot.val() || 0;
       setCurrentBid(price);
       currentBidRef.current = price;
-      
       setCustomBid((prev) => {
           const minNextBid = price + 10;
           if (!isAuctionActiveRef.current) return minNextBid;
@@ -101,10 +102,15 @@ export const InteractionLayer = ({ roomId, isHost }) => {
         setViewerCount(snapshot.size);
     });
 
-    return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); };
+    const unsubItem = onValue(itemRef, (snapshot) => {
+        const id = snapshot.val();
+        setCurrentItemId(id);
+        currentItemRef.current = id;
+    });
+
+    return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); unsubItem(); };
   }, [roomId]);
 
-  // --- 2. PRESENCE SYSTEM ---
   useEffect(() => {
       if (!isHost) {
           const userId = Math.random().toString(36).substring(2, 15);
@@ -115,40 +121,29 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       }
   }, [roomId, isHost]);
 
-  // --- 3. COUNTDOWN TIMER ---
   useEffect(() => {
       if (!isAuctionActive || !endTime) {
           setTimeLeft(30);
           return;
       }
-
       const interval = setInterval(() => {
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
           setTimeLeft(remaining);
-
-          // Auto-Stop Logic
-          if (remaining === 0 && isHost) {
-              // Use ref to ensure we only trigger stopAuction ONCE per session
-              if (!stopTriggeredRef.current) {
-                  stopTriggeredRef.current = true;
-                  stopAuction();
-              }
-          }
+          if (remaining === 0 && isHost) stopAuction();
       }, 100);
-
       return () => clearInterval(interval);
   }, [isAuctionActive, endTime, isHost]);
 
-  // Auto-scroll chat
   useEffect(() => {
     if (chatEndRef.current) {
         chatEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
+  const currentItem = INVENTORY.find(i => i.id === currentItemId);
 
-  // --- 4. ACTIONS ---
+  // --- ACTIONS ---
   const sendMessage = (e) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -161,12 +156,18 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     setInput("");
   };
 
+  const selectItem = (item) => {
+      if (isAuctionActive) return; 
+      set(ref(db, `rooms/${roomId}/currentItem`), item.id);
+      set(ref(db, `rooms/${roomId}/bid`), item.startPrice); 
+      setShowInventory(false);
+  };
+
   const handlePriceChange = (e) => {
       if (isAuctionActive) return; 
       const valStr = e.target.value;
-      if (valStr === '') {
-          set(ref(db, `rooms/${roomId}/bid`), 0);
-      } else {
+      if (valStr === '') set(ref(db, `rooms/${roomId}/bid`), 0);
+      else {
           const val = parseInt(valStr);
           if (!isNaN(val)) set(ref(db, `rooms/${roomId}/bid`), val);
       }
@@ -189,65 +190,50 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
     runTransaction(bidRef, (current) => {
       const safeCurrent = current || 0;
-      if (customBid > safeCurrent) {
-          return customBid; 
-      }
-      return; // Abort
+      if (customBid > safeCurrent) return customBid;
+      return;
     }).then((result) => {
-        if (result.committed) {
-            set(lastBidderRef, username);
-        }
+        if (result.committed) set(lastBidderRef, username);
     });
 
-    // Optimistic UI update for chat
     push(ref(db, `rooms/${roomId}/chat`), {
         text: `${username} bid ₹${customBid}`,
         type: 'bid'
     });
   };
 
-  // --- 5. AUCTION LOGIC ---
   const startAuction = () => {
-      stopTriggeredRef.current = false; // Reset safety trigger
+      if (!currentItemId) {
+          alert("Please select an item first!");
+          return;
+      }
       const newEndTime = Date.now() + (30 * 1000);
-
       update(ref(db, `rooms/${roomId}`), {
           "auction/isActive": true,
           "auction/endTime": newEndTime,
-          "lastBidder": null // Reset winner
+          "lastBidder": null
       });
 
+      const item = INVENTORY.find(i => i.id === currentItemId);
       push(ref(db, `rooms/${roomId}/chat`), {
-        text: `🚨 AUCTION STARTED AT ₹${currentBid}!`,
+        text: `🚨 AUCTION STARTED: ${item ? item.name : 'Item'} at ₹${currentBid}!`,
         type: 'bid'
       });
   };
 
-  // FIX: ROBUST STOP LOGIC
   const stopAuction = async () => {
-      // 1. LOCK THE AUCTION INSTANTLY
-      // This prevents any new bids from being accepted in the DB rules/logic
-      await update(ref(db, `rooms/${roomId}/auction`), {
-          isActive: false,
-          endTime: 0
-      });
-
-      // 2. Wait a tiny bit for any pending "in-flight" bids to resolve
-      await new Promise(r => setTimeout(r, 500));
-
-      // 3. FETCH THE TRUTH FROM SERVER (Do not use local state)
-      // This solves the race condition where local state might be 1150 but server is 1170
-      const bidSnapshot = await get(ref(db, `rooms/${roomId}/bid`));
-      const bidderSnapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
-
-      const finalPrice = bidSnapshot.exists() ? bidSnapshot.val() : 0;
-      const winnerName = bidderSnapshot.exists() ? bidderSnapshot.val() : "Nobody";
-
-      // 4. ANNOUNCE WINNER
-      push(ref(db, `rooms/${roomId}/chat`), {
-          text: `🛑 ${winnerName} CALLED DIBS FOR ₹${finalPrice}!`,
-          type: 'bid'
-      });
+      const finalPrice = currentBidRef.current;
+      const item = INVENTORY.find(i => i.id === currentItemRef.current);
+      
+      if (isAuctionActiveRef.current) { 
+        const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
+        const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
+        push(ref(db, `rooms/${roomId}/chat`), {
+            text: `🛑 ${winnerName} CALLED DIBS ON ${item ? item.name : 'ITEM'} FOR ₹${finalPrice}!`,
+            type: 'bid'
+        });
+      }
+      update(ref(db, `rooms/${roomId}`), { "auction/isActive": false, "auction/endTime": 0 });
   };
 
   const toggleAuction = () => {
@@ -255,26 +241,21 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       else startAuction();
   };
 
+  // --- RENDER ---
   return (
-    <div className="absolute inset-0 z-20 flex flex-col justify-end pb-20 px-4 pointer-events-none overflow-hidden">
+    // INCREASED PADDING BOTTOM to 24 to lift Chat/Bid buttons up
+    <div className="absolute inset-0 z-20 flex flex-col justify-end pb-24 px-4 pointer-events-none overflow-hidden">
       
-      {/* HEADER */}
+      {/* TOP RIGHT: PRICE & STATS */}
       <div className="absolute top-24 right-4 pointer-events-auto flex flex-col items-end gap-2">
-          {/* Viewer Count */}
           <div className="bg-black/40 backdrop-blur border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
               <Eye className="w-3 h-3 text-red-500 animate-pulse" />
               <span className="text-xs font-mono font-bold text-white tabular-nums">{viewerCount}</span>
           </div>
-
-          {/* Price Box */}
-          <div className={`
-              backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative
-              ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}
-          `}>
+          <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}`}>
               <span className="text-[10px] text-zinc-300 font-mono uppercase tracking-wider mb-1 px-1">
                   {isAuctionActive ? "Current Bid" : "Starting Price"}
               </span>
-
               <div className="flex items-center justify-end gap-1 w-full">
                   {isHost && !isAuctionActive && (
                       <div className="flex flex-col gap-0.5 mr-2">
@@ -282,7 +263,6 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                           <button onClick={() => manualStep(-10)} className="text-white hover:text-dibs-neon active:scale-90 bg-white/10 rounded p-0.5"><ChevronDown className="w-3 h-3" /></button>
                       </div>
                   )}
-
                   <div className="flex items-center justify-end gap-1 flex-1">
                       <span className={`text-xl font-bold ${isAuctionActive ? 'text-white' : 'text-dibs-neon'}`}>₹</span>
                       {isHost ? (
@@ -302,22 +282,77 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                   </div>
               </div>
           </div>
-
-          {/* Timer */}
           {isAuctionActive && (
-              <motion.div 
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}
-              >
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}>
                   <Clock className="w-3 h-3" />
                   <span>00:{timeLeft.toString().padStart(2, '0')}</span>
               </motion.div>
           )}
       </div>
 
-      {/* CHAT */}
-      <div ref={chatContainerRef} className="w-full max-w-[70%] h-56 mb-4 overflow-y-auto mask-chat pointer-events-auto pr-2">
+      {/* BOTTOM LEFT: ITEM CARD (ABSOLUTELY POSITIONED) */}
+      {/* Positioned below Chat Input? No, instructions said Bottom Left (Green Box). 
+          Given Chat Input is in the flow, this needs to be pinned to bottom-left. 
+          z-40 to stay above chat if overlap occurs. */}
+      <div className="absolute bottom-4 left-4 pointer-events-auto z-40 mb-0">
+          <AnimatePresence>
+            {showInventory && isHost && (
+                <motion.div 
+                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                    className="absolute bottom-full mb-2 left-0 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto"
+                >
+                    <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase text-zinc-500 tracking-widest sticky top-0 bg-black/90">Select Item</div>
+                    {INVENTORY.map(item => (
+                        <button 
+                            key={item.id}
+                            onClick={() => selectItem(item)}
+                            className="p-3 text-left hover:bg-white/10 transition-colors border-b border-white/5 last:border-0 flex flex-col gap-1"
+                        >
+                            <div className="flex justify-between w-full">
+                                <span className="text-sm font-bold text-white">{item.name}</span>
+                                <span className="text-xs font-mono text-dibs-neon">₹{item.startPrice}</span>
+                            </div>
+                            <span className="text-xs text-zinc-400 truncate">{item.desc}</span>
+                        </button>
+                    ))}
+                </motion.div>
+            )}
+          </AnimatePresence>
+
+          {currentItem ? (
+              <div 
+                  onClick={() => isHost && !isAuctionActive && setShowInventory(!showInventory)}
+                  className={`
+                      w-64 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-3 flex gap-3 items-center shadow-lg transition-all
+                      ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-black/80 hover:border-white/30 active:scale-95' : ''}
+                  `}
+              >
+                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center shrink-0 border border-white/5">
+                      <ShoppingBag className="w-5 h-5 text-white/70" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] font-mono text-dibs-neon bg-dibs-neon/10 px-1 rounded">LOT #{currentItem.id}</span>
+                      </div>
+                      <h3 className="text-sm font-bold text-white leading-tight truncate">{currentItem.name}</h3>
+                      <p className="text-[10px] text-zinc-400 truncate">{currentItem.desc}</p>
+                  </div>
+                  {isHost && !isAuctionActive && <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? 'rotate-180' : ''}`} />}
+              </div>
+          ) : (
+              isHost && (
+                  <button onClick={() => setShowInventory(!showInventory)} className="bg-dibs-neon text-black font-bold text-xs px-4 py-3 rounded-xl shadow-lg hover:bg-white transition-colors flex items-center gap-2">
+                      <ShoppingBag className="w-4 h-4" />
+                      SELECT ITEM TO AUCTION
+                  </button>
+              )
+          )}
+      </div>
+
+      {/* CHAT STREAM */}
+      <div ref={chatContainerRef} className="w-full max-w-[60%] h-48 mb-4 overflow-y-auto mask-chat pointer-events-auto pr-2">
           <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
             <AnimatePresence initial={false}>
                 {messages.map((msg, i) => (
@@ -344,7 +379,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           </div>
       </div>
 
-      {/* CONTROLS */}
+      {/* BOTTOM CONTROLS (Lifted UP via parent padding) */}
       <div className="pointer-events-auto flex items-center gap-2 w-full">
         <form onSubmit={sendMessage} className="flex-1 relative group">
             <input 
@@ -358,6 +393,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
             </button>
         </form>
 
+        {/* Viewer Bidding */}
         {!isHost && (
             <div className={`flex items-center gap-1 bg-white rounded-full p-1 shadow-lg transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
                 <div className="flex flex-col gap-0.5 px-1">
@@ -370,6 +406,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
             </div>
         )}
 
+        {/* Host Start/Stop Button */}
         {isHost && (
             <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
                 {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
@@ -377,6 +414,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
             </button>
         )}
       </div>
+
     </div>
   );
 };

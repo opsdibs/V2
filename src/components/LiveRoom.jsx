@@ -28,7 +28,6 @@ export const LiveRoom = ({ roomId, isHost }) => {
     if (isRunning.current) return;
     isRunning.current = true;
 
-    // LOCAL VARIABLES (Prevent Null Crash)
     let myClient = null;
     let myTracks = { audio: null, video: null };
     let isActive = true;
@@ -37,7 +36,7 @@ export const LiveRoom = ({ roomId, isHost }) => {
       try {
         setStatus("CONNECTING...");
         
-        // 1. Create Client & SYNC REF IMMEDIATELY
+        // 1. Create Client
         myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
         clientRef.current = myClient; 
 
@@ -75,30 +74,28 @@ export const LiveRoom = ({ roomId, isHost }) => {
         // 4. Host Setup
         if (isHost) {
           setStatus("STARTING CAMERA...");
-          // Smart Resolution (HD -> SD)
+          let tracks;
           try {
-             const [mic, cam] = await AgoraRTC.createMicrophoneAndCameraTracks(
+             tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
-                 { encoderConfig: "720p_1" }
+                 { encoderConfig: "720p_1" } 
              );
              myTracks = { audio: mic, video: cam };
           } catch (e) {
-             // Fallback
-             const [mic, cam] = await AgoraRTC.createMicrophoneAndCameraTracks();
+             console.warn("HD failed, retrying SD...");
+             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
              myTracks = { audio: mic, video: cam };
           }
 
-          if (!isActive) { 
-              myTracks.audio?.close(); 
-              myTracks.video?.close(); 
-              return; 
-          }
+          const [mic, cam] = tracks;
 
-          localTracksRef.current = myTracks; // SYNC REF
+          if (!isActive) { mic.close(); cam.close(); return; }
+
+          localTracksRef.current = { audio: mic, video: cam };
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
-              myTracks.video.play(localContainer);
+              cam.play(localContainer);
               setVideoReady(true);
               setStatus("READY TO AIR");
           }
@@ -114,10 +111,9 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
     initAgora();
 
-    // CLEANUP
     return () => {
       isActive = false;
-      isRunning.current = false; // Allow re-run if component remounts
+      isRunning.current = false;
       
       const cleanup = async () => {
           if (localTracksRef.current.audio) localTracksRef.current.audio.close();
@@ -129,7 +125,6 @@ export const LiveRoom = ({ roomId, isHost }) => {
               myClient.removeAllListeners();
           }
           
-          // Safe Cleanup: Only clear ref if it matches our local client
           if (clientRef.current === myClient) {
               clientRef.current = null;
           }
@@ -140,8 +135,6 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
   // --- TOGGLE STREAMING ---
   const handleToggleStream = async () => {
-      console.log("Button Clicked"); 
-
       if (!clientRef.current) {
           console.error("Client Ref is null");
           return;
@@ -157,7 +150,6 @@ export const LiveRoom = ({ roomId, isHost }) => {
               setStatus("READY TO AIR");
           } else {
               setStatus("PUBLISHING...");
-              // Wake up audio
               if (localTracksRef.current.audio) {
                   await localTracksRef.current.audio.setEnabled(true);
               }
@@ -243,7 +235,6 @@ export const LiveRoom = ({ roomId, isHost }) => {
             <div className="flex items-center gap-2">
                  {isHost && (
                      <>
-                        {/* FLIP CAMERA BUTTON */}
                         {cameras.length > 1 && (
                             <button onClick={switchCamera} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
                                 <RefreshCw className="w-4 h-4" />
@@ -263,27 +254,26 @@ export const LiveRoom = ({ roomId, isHost }) => {
             </div>
         </div>
 
-        {/* Host Stream Trigger - MERGED UI CHANGE (Direct Position) */}
-        {isHost && videoReady && !isStreaming && (
-            <button 
-                onClick={handleToggleStream}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] pointer-events-auto bg-white text-black px-8 py-4 rounded-full font-black text-sm tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-3"
-            >
-                <Radio className="w-5 h-5 text-red-600 animate-pulse" />
-                GO LIVE
-            </button>
-        )}
-
-        {/* Host End Stream */}
-        {isHost && isStreaming && (
-             <div className="pointer-events-auto self-center mb-24">
-                <button 
-                    onClick={handleToggleStream}
-                    className="bg-neutral-900/90 border border-red-500/50 text-red-500 px-6 py-2 rounded-full font-bold text-xs tracking-widest uppercase hover:bg-red-950 transition-colors"
-                >
-                    END STREAM
-                </button>
-             </div>
+        {/* HOST STREAM CONTROLS (Bottom Right) */}
+        {isHost && videoReady && (
+            <>
+                {!isStreaming ? (
+                    <button 
+                        onClick={handleToggleStream}
+                        className="absolute bottom-4 right-4 pointer-events-auto bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60]"
+                    >
+                        <Radio className="w-4 h-4 text-red-600 animate-pulse" />
+                        GO LIVE
+                    </button>
+                ) : (
+                    <button 
+                        onClick={handleToggleStream}
+                        className="absolute bottom-4 right-4 pointer-events-auto bg-neutral-900/90 border border-red-500/50 text-red-500 px-6 py-3 rounded-full font-bold text-xs tracking-widest uppercase hover:bg-red-950 transition-colors z-[60]"
+                    >
+                        END STREAM
+                    </button>
+                )}
+            </>
         )}
       </div>
     </div>
