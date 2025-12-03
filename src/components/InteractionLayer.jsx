@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, Clock, Play, Square, Eye, ShoppingBag } from 'lucide-react'; 
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag } from 'lucide-react';
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database'; 
 import { db } from '../lib/firebase';
 
 // --- INVENTORY ---
 const INVENTORY = [
-  { id: 101, name: "Vintage Levi's 501", desc: "Size 32, Light Wash, 90s", startPrice: 1500 },
-  { id: 102, name: "Nike Windbreaker", desc: "Size L, Teal/Purple, Mint", startPrice: 800 },
-  { id: 103, name: "Carhartt Detroit", desc: "Size XL, Distressed, Tan", startPrice: 2500 },
-  { id: 104, name: "Band Tee (Nirvana)", desc: "Size M, Faded Black", startPrice: 1200 },
+  { id: 101, name: "Vintage Levi's 501", desc: "Size 32, Light Wash, 90s", startPrice: 150 },
+  { id: 102, name: "Nike Windbreaker", desc: "Size L, Teal/Purple, Mint", startPrice: 80 },
+  { id: 103, name: "Carhartt Detroit", desc: "Size XL, Distressed, Tan", startPrice: 250 },
+  { id: 104, name: "Band Tee (Nirvana)", desc: "Size M, Faded Black", startPrice: 120 },
 ];
 
 const quirky_usernames = [
@@ -55,6 +55,10 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const isAuctionActiveRef = useRef(false);
   const currentBidRef = useRef(0); 
   const currentItemRef = useRef(null); 
+
+  // --- FIX: GET USER ID FROM URL ---
+  const searchParams = new URLSearchParams(window.location.search);
+  const persistentUserId = searchParams.get('uid');
 
   // --- SYNC LOGIC ---
   useEffect(() => {
@@ -406,12 +410,31 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
             {/* Viewer Bidding (Replaces Auction buttons for viewers) */}
             {!isHost && (
-                <div className={`flex items-center gap-1 bg-white rounded-full p-1 shadow-lg transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
-                    <div className="flex flex-col gap-0.5 px-1">
-                        <button onClick={handleIncrease} className="text-black hover:text-zinc-500 active:scale-90 transition-transform"><ChevronUp className="w-3 h-3" /></button>
-                        <button onClick={handleDecrease} disabled={customBid <= currentBid + 10} className={`text-black transition-transform ${customBid <= currentBid + 10 ? 'opacity-20' : 'hover:text-zinc-500 active:scale-90'}`}><ChevronDown className="w-3 h-3" /></button>
+                <div className={`flex flex-col items-center gap-2 transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
+                    
+                    {/* Arrows Row */}
+                    <div className="flex items-center justify-between w-28">
+                        <button 
+                            onClick={handleDecrease} 
+                            disabled={customBid <= currentBid + 10}
+                            className={`p-2 rounded-full bg-black/40 backdrop-blur text-white hover:bg-white hover:text-black active:scale-90 transition-all ${customBid <= currentBid + 10 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        >
+                            <ChevronLeft className="w-6 h-6" />
+                        </button>
+
+                        <button 
+                            onClick={handleIncrease} 
+                            className="p-2 rounded-full bg-black/40 backdrop-blur text-white hover:bg-white hover:text-black active:scale-90 transition-all"
+                        >
+                            <ChevronRight className="w-6 h-6" />
+                        </button>
                     </div>
-                    <button onClick={placeBid} className="bg-black text-white h-9 px-4 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-1 hover:bg-zinc-800 active:scale-95 transition-all">
+
+                    {/* Big Bid Button */}
+                    <button 
+                        onClick={placeBid} 
+                        className="bg-[#FF6600] text-white w-36 py-4 rounded-[2rem] font-black text-4xl tracking-tighter shadow-2xl active:scale-95 transition-all hover:bg-[#ff8533] flex items-center justify-center border-4 border-white/10"
+                    >
                         <span>₹{customBid}</span>
                     </button>
                 </div>
