@@ -5,11 +5,46 @@ import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw, Shield 
 import { AGORA_APP_ID, AGORA_TOKEN } from '../lib/settings';
 import { InteractionLayer } from './InteractionLayer';
 import { ModeratorPanel } from './ModeratorPanel';
+import { ref, get } from 'firebase/database';
+import { db } from '../lib/firebase';
 
-export const LiveRoom = ({ roomId, isHost }) => {
+export const LiveRoom = ({ roomId }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const userRole = searchParams.get('role');
+  // --- SECURITY: VERIFY ROLE FROM DB ---
+  const dbKey = searchParams.get('dbKey');
+  const [verifiedRole, setVerifiedRole] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(true);
+
+  useEffect(() => {
+    const verifyUserSession = async () => {
+        if (!dbKey) {
+            navigate('/'); // No session key = Unauthorized
+            return;
+        }
+        try {
+            // Fetch the authoritative role from Firebase
+            const snapshot = await get(ref(db, `audience_data/${roomId}/${dbKey}`));
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                setVerifiedRole(data.role); // 'host', 'moderator', or 'audience'
+            } else {
+                console.warn("Invalid Session Key");
+                navigate('/'); // Fake/Old key
+            }
+        } catch (error) {
+            console.error("Verification failed:", error);
+            navigate('/');
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+    verifyUserSession();
+  }, [roomId, dbKey, navigate]);
+
+  // Derived Permissions (Source of Truth)
+  const isHost = verifiedRole === 'host';
+  const isModerator = verifiedRole === 'moderator';
   
   // Connection States
   const [joined, setJoined] = useState(false);     
@@ -208,6 +243,17 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
   const isLoading = isHost ? !videoReady : (!joined);
 
+  if (isVerifying) {
+      return (
+          <div className="w-full h-screen bg-black flex items-center justify-center text-white">
+              <div className="flex flex-col items-center gap-4">
+                  <div className="w-8 h-8 border-4 border-t-transparent border-[#FF6600] rounded-full animate-spin"></div>
+                  <span className="font-mono text-xs uppercase tracking-widest">Verifying Access...</span>
+              </div>
+          </div>
+      );
+  }
+
   return (
     <div className="relative w-full h-screen bg-black text-white overflow-hidden">
       
@@ -250,7 +296,7 @@ export const LiveRoom = ({ roomId, isHost }) => {
             
             <div className="flex items-center gap-2">
                  {/* MODERATOR TOGGLE BUTTON */}
-                 {userRole === 'moderator' && (
+                 {isModerator === 'moderator' && (
                      <button 
                         onClick={() => setShowModPanel(!showModPanel)} 
                         className={`p-2 rounded-full transition-colors ${showModPanel ? 'bg-white text-black' : 'bg-black/50 text-white hover:bg-white hover:text-black'}`}
@@ -302,7 +348,7 @@ export const LiveRoom = ({ roomId, isHost }) => {
             </>
         )}
         {/* MODERATOR OVERLAY */}
-        {userRole === 'moderator' && (
+        {isModerator === 'moderator' && (
           <ModeratorPanel roomId={roomId} onClose={() => setShowModPanel(false)} />
         )}
       </div>
