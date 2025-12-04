@@ -296,7 +296,7 @@ export const LiveRoom = ({ roomId }) => {
             
             <div className="flex items-center gap-2">
                  {/* MODERATOR TOGGLE BUTTON */}
-                 {isModerator === 'moderator' && (
+                 {isModerator && (
                      <button 
                         onClick={() => setShowModPanel(!showModPanel)} 
                         className={`p-2 rounded-full transition-colors ${showModPanel ? 'bg-white text-black' : 'bg-black/50 text-white hover:bg-white hover:text-black'}`}
@@ -348,7 +348,7 @@ export const LiveRoom = ({ roomId }) => {
             </>
         )}
         {/* MODERATOR OVERLAY */}
-        {isModerator === 'moderator' && (
+        {isModerator && showModPanel && (
           <ModeratorPanel roomId={roomId} onClose={() => setShowModPanel(false)} />
         )}
       </div>

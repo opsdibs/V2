@@ -30,22 +30,60 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [activeTab, setActiveTab] = useState('users'); // 'users' or 'history'
   const [users, setUsers] = useState([]);
   const [history, setHistory] = useState([]);
+  const [onlineIds, setOnlineIds] = useState([]);
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
-  // 1. Fetch Audience List
+  // 1. Fetch & Process Audience List
   useEffect(() => {
     const usersRef = ref(db, `audience_data/${roomId}`);
     return onValue(usersRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // Convert object to array and add ID
-        const userList = Object.entries(data).map(([key, val]) => ({
-          dbKey: key, 
-          ...val 
-        })).filter(u => u.role !== 'host'); // Don't mod the host
-        setUsers(userList);
+        const now = Date.now();
+        const rawList = Object.entries(data).map(([key, val]) => ({
+          dbKey: key,
+          ...val
+        }));
+
+        // Processing Pipeline:
+        const processed = rawList
+          // 1. Exclude Host & Moderator
+          .filter(u => u.role !== 'host' && u.role !== 'moderator') 
+          
+          // 2. Deduplicate (Keep most recent session per userId)
+          .reduce((acc, current) => {
+            const existingIndex = acc.findIndex(u => u.userId === current.userId);
+            if (existingIndex === -1) {
+              acc.push(current);
+            } else {
+              // If current is newer, replace existing
+              if (current.joinedAt > acc[existingIndex].joinedAt) {
+                acc[existingIndex] = current;
+              }
+            }
+            return acc;
+          }, [])
+
+          // 3. Mark Online Status & Check Time Window
+          .map(user => ({
+            ...user,
+            isOnline: onlineIds.includes(user.userId)
+          }))
+          .filter(user => {
+            // Keep if Online OR (Offline but joined within last 2 hours)
+            return user.isOnline || (now - user.joinedAt < TWO_HOURS_MS);
+          })
+
+          // 4. Sort: Online first, then by Join Time
+          .sort((a, b) => {
+            if (a.isOnline === b.isOnline) return b.joinedAt - a.joinedAt;
+            return a.isOnline ? -1 : 1;
+          });
+
+        setUsers(processed);
       }
     });
-  }, [roomId]);
+  }, [roomId, onlineIds]); // Added onlineIds as dependency to re-sort when presence changes
 
   // 2. Fetch Auction History
   useEffect(() => {
@@ -56,6 +94,20 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
         // Sort by timestamp descending
         const histList = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
         setHistory(histList);
+      }
+    });
+  }, [roomId]);
+
+  // 3. Fetch Online Presence (Real-time)
+  useEffect(() => {
+    const presenceRef = ref(db, `rooms/${roomId}/viewers`);
+    return onValue(presenceRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // The keys are the userIds
+        setOnlineIds(Object.keys(data));
+      } else {
+        setOnlineIds([]);
       }
     });
   }, [roomId]);
@@ -117,16 +169,22 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
         
         {/* VIEWERS TAB */}
         {activeTab === 'users' && users.map(user => (
-            <div key={user.userId} className="bg-white/5 border border-white/5 p-3 rounded-xl flex justify-between items-center group">
+            <div 
+                key={user.userId}
+                // CHANGE: Add opacity-50 if offline 
+                className={`border border-white/5 p-3 rounded-xl flex justify-between items-center group transition-all ${user.isOnline ? 'bg-white/10' : 'bg-white/5 opacity-50'}`}>
                 <div>
                     <div className="flex items-center gap-2">
-                        {/* 1. Main Display: Quirky Username */}
+                        {/* CHANGE: Add Online/Offline Dot */}
+                        <div className={`w-2 h-2 rounded-full ${user.isOnline ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'}`} />
+
                         <span className="font-bold text-white text-sm">{getQuirkyName(user.userId)}</span>
                         {user.restrictions?.isKicked && <span className="text-[10px] bg-red-500 px-1 rounded text-white">KICKED</span>}
                     </div>
                     {/* 2. Subtext: UserID | Email */}
-                    <div className="text-[10px] text-zinc-400 font-mono mt-1">
+                    <div className="text-[10px] text-zinc-400 font-mono mt-1 pl-4">
                         {user.userId} | {user.email}
+                        {!user.isOnline && <span className="ml-2 italic text-zinc-600">(Offline)</span>}
                     </div>
                 </div>
                 

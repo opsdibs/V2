@@ -128,15 +128,19 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); unsubItem(); };
   }, [roomId]);
 
+  // --- PRESENCE SYSTEM ---
   useEffect(() => {
       if (!isHost) {
-          const userId = Math.random().toString(36).substring(2, 15);
+          // Use the persistent ID if available, otherwise fallback (prevents ReferenceError)
+          const userId = persistentUserId || Math.random().toString(36).substring(2, 15);
+          
           const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
           set(myPresenceRef, true);
           onDisconnect(myPresenceRef).remove();
+          
           return () => { remove(myPresenceRef); };
       }
-  }, [roomId, isHost]);
+  }, [roomId, isHost, persistentUserId]); // <--- Added persistentUserId dependency
 
   useEffect(() => {
       if (!isAuctionActive || !endTime) {
