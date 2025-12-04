@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag } from 'lucide-react';
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus } from 'lucide-react';
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database'; 
 import { db } from '../lib/firebase';
 
@@ -271,7 +271,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       const item = INVENTORY.find(i => i.id === currentItemId);
       push(ref(db, `rooms/${roomId}/chat`), {
         text: `🚨 AUCTION STARTED: ${item ? item.name : 'Item'} at ₹${currentBid}!`,
-        type: 'bid'
+        type: 'auction'
       });
   };
 
@@ -301,7 +301,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
         
         push(ref(db, `rooms/${roomId}/chat`), {
             text: `🛑 ${winnerName} CALLED DIBS ON ${item ? item.name : 'ITEM'} FOR ₹${finalPrice}!`,
-            type: 'bid'
+            type: 'auction'
         });
       }
       // 4. Cleanup
@@ -315,17 +315,17 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   };
 
   return (
-    <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden max-w-md mx-auto border-x border-white/5 shadow-2xl">
       
       {/* TOP RIGHT: STATS */}
       <div className="absolute top-24 right-4 pointer-events-auto flex flex-col items-end gap-2">
           <div className="bg-black/40 backdrop-blur border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
               <Eye className="w-3 h-3 text-red-500 animate-pulse" />
-              <span className="text-xs font-mono font-bold text-white tabular-nums">{viewerCount}</span>
+              <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
           </div>
 
           <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}`}>
-              <span className="text-[10px] text-zinc-300 font-mono uppercase tracking-wider mb-1 px-1">
+              <span className="text-[10px] text-zinc-300 font-display uppercase tracking-wider mb-1 px-1">
                   {isAuctionActive ? "Current Bid" : "Starting Price"}
               </span>
               <div className="flex items-center justify-end gap-1 w-full">
@@ -356,7 +356,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           </div>
 
           {isAuctionActive && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}>
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-display text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}>
                   <Clock className="w-3 h-3" />
                   <span>00:{timeLeft.toString().padStart(2, '0')}</span>
               </motion.div>
@@ -364,7 +364,11 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       </div>
 
       {/* CHAT STREAM (Lifted higher to clear the bottom dock) */}
-      <div ref={chatContainerRef} className="absolute bottom-36 left-4 w-full max-w-[60%] h-64 overflow-y-auto mask-chat pointer-events-auto pr-2">
+      <div 
+        ref={chatContainerRef} 
+        className="absolute bottom-60 left-4 w-full max-w-[60%] h-64 overflow-y-auto pointer-events-auto pr-2"
+        style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
+      >
           <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
             <AnimatePresence initial={false}>
                 {messages.map((msg, i) => (
@@ -372,18 +376,26 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                     key={i}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className={`self-start rounded-lg px-3 py-1.5 text-sm backdrop-blur-sm border shadow-sm break-words ${
+                    className={`self-start w-48 rounded-[24px] px-4 py-2 shadow-sm break-words font-display ${
                         msg.type === 'bid' 
-                        ? 'bg-dibs-neon/10 border-dibs-neon/50 text-dibs-neon font-bold'
-                        : msg.isHost 
-                            ? 'bg-red-600/20 border-red-500/50 text-red-100' 
-                            : 'bg-black/30 border-white/10 text-white'
+                        ? 'bg-[#ff6500] border border-white/20 text-white font-bold'
+                        : msg.type === 'auction'
+                        ? 'bg-[#161616] border border-[#ff6500] text-white font-bold'
+                        : 'bg-[#161616] text-white border border-white/10 font-normal' 
                     }`}
+                    
                 >
-                    <span className="font-bold opacity-70 text-[10px] mr-2 block">
-                        {msg.type === 'bid' ? '🔔 UPDATE' : msg.user}
+                    {/* CHANGE: Username font size 8px, Orange color */}
+                    {msg.type !== 'bid' && msg.type !== 'auction' && (
+                        <span className="font-bold text-[8px] mr-2 block text-[#FF6600]">
+                            {msg.user}
+                        </span>
+                    )}
+
+                    {/* CHANGE: Comment text size 10px */}
+                    <span className={`text-[10px] leading-tight block ${msg.type === 'msg' ? 'font-normal' : 'font-bold'}`}>
+                        {msg.text}
                     </span>
-                    {msg.text}
                 </motion.div>
                 ))}
             </AnimatePresence>
@@ -395,14 +407,14 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end">
         
         {/* LEFT COLUMN: Chat Input + Item Card */}
-        <div className="flex flex-col gap-2 pointer-events-auto">
+        <div className="flex flex-col gap-2 pointer-events-auto pb-16">
             {/* Chat Input */}
-            <form onSubmit={sendMessage} className="relative group w-64">
+            <form onSubmit={sendMessage} className="relative group w-48 mb-2">
                 <input 
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={`Chat as ${username}...`}
-                    className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-sm text-white focus:outline-none focus:border-white/60 transition-all font-mono placeholder:text-white/30"
+                    className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-sm text-white focus:outline-none focus:border-white/60 transition-all font-display placeholder:text-white/30"
                 />
                 <button type="submit" className="absolute right-1 top-1 bottom-1 w-8 bg-white/10 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
                     <Send className="w-3 h-3" />
@@ -410,14 +422,15 @@ export const InteractionLayer = ({ roomId, isHost }) => {
             </form>
 
             {/* Item Card */}
-            <div className="z-40">
+            {/* CHANGE: Item Card moved to the BOTTOM (below Chat) */}
+            <div className="z-40 mb-4">
                 <AnimatePresence>
                     {showInventory && isHost && (
                         <motion.div 
                             initial={{ opacity: 0, y: 20, scale: 0.9 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-                            className="absolute bottom-full mb-2 left-0 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto"
+                            className="absolute bottom-full mb-2 left-0 w-48 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto"
                         >
                             <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase text-zinc-500 tracking-widest sticky top-0 bg-black/90">Select Item</div>
                             {INVENTORY.map(item => (
@@ -428,7 +441,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                                 >
                                     <div className="flex justify-between w-full">
                                         <span className="text-sm font-bold text-white">{item.name}</span>
-                                        <span className="text-xs font-mono text-dibs-neon">₹{item.startPrice}</span>
+                                        <span className="text-xs font-di text-dibs-neon">₹{item.startPrice}</span>
                                     </div>
                                     <span className="text-xs text-zinc-400 truncate">{item.desc}</span>
                                 </button>
@@ -440,22 +453,27 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                 {currentItem ? (
                     <div 
                         onClick={() => isHost && !isAuctionActive && setShowInventory(!showInventory)}
+                        // CHANGE: Updated styling to match the "HNM Hoodie" card image
+                        // - bg-black (solid black)
+                        // - rounded-2xl
+                        // - p-4 (more padding)
+                        // - w-64 (fixed width)
                         className={`
-                            w-64 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-3 flex gap-3 items-center shadow-lg transition-all
-                            ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-black/80 hover:border-white/30 active:scale-95' : ''}
+                            w-48 bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/5
+                            ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all' : ''}
                         `}
                     >
-                        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center shrink-0 border border-white/5">
-                            <ShoppingBag className="w-5 h-5 text-white/70" />
+                        {/* Top Label: ITEM #1 */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-[#FF6600] uppercase tracking-wider">ITEM #{currentItem.id}</span>
+                            {isHost && !isAuctionActive && <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? 'rotate-180' : ''}`} />}
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-[10px] font-mono text-dibs-neon bg-dibs-neon/10 px-1 rounded">LOT #{currentItem.id}</span>
-                            </div>
-                            <h3 className="text-sm font-bold text-white leading-tight truncate">{currentItem.name}</h3>
-                            <p className="text-[10px] text-zinc-400 truncate">{currentItem.desc}</p>
-                        </div>
-                        {isHost && !isAuctionActive && <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? 'rotate-180' : ''}`} />}
+                        
+                        {/* Item Name */}
+                        <h3 className="text-lg font-bold text-white leading-tight truncate mt-0.5">{currentItem.name}</h3>
+                        
+                        {/* Item Description / Size */}
+                        <p className="text-xs text-zinc-400 truncate">{currentItem.desc}</p>
                     </div>
                 ) : (
                     isHost && (
@@ -480,33 +498,37 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
             {/* Viewer Bidding (Replaces Auction buttons for viewers) */}
             {!isHost && (
-                <div className={`flex flex-col items-center gap-2 transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
+                <div className={`flex flex-col items-center gap-2 transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-100'}`}>
                     
-                    {/* Arrows Row */}
-                    <div className="flex items-center justify-between w-28">
-                        <button 
-                            onClick={handleDecrease} 
-                            disabled={customBid <= currentBid + 10}
-                            className={`p-2 rounded-full bg-black/40 backdrop-blur text-white hover:bg-white hover:text-black active:scale-90 transition-all ${customBid <= currentBid + 10 ? 'opacity-30 cursor-not-allowed' : ''}`}
-                        >
-                            <ChevronLeft className="w-6 h-6" />
-                        </button>
+                    {/* CHANGE: Grouped Controls into one Black Container */}
+                    <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-40 mb-4">
+                        
+                        {/* Top Row: Minus and Plus Buttons */}
+                        <div className="flex items-center justify-between px-2 py-2">
+                            <button 
+                                onClick={handleDecrease} 
+                                disabled={customBid <= currentBid + 10}
+                                className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${customBid <= currentBid + 10 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                            >
+                                <Minus className="w-8 h-8" />
+                            </button>
 
+                            <button 
+                                onClick={handleIncrease} 
+                                className="text-white hover:text-zinc-300 active:scale-90 transition-all p-2"
+                            >
+                                <Plus className="w-8 h-8" />
+                            </button>
+                        </div>
+
+                        {/* Bottom: Orange Bid Button (Inside the container) */}
                         <button 
-                            onClick={handleIncrease} 
-                            className="p-2 rounded-full bg-black/40 backdrop-blur text-white hover:bg-white hover:text-black active:scale-90 transition-all"
+                            onClick={placeBid} 
+                            className="bg-[#FF6600] text-white w-full py-4 rounded-[2rem] font-black text-3xl tracking-tighter active:scale-95 transition-all hover:bg-[#ff8533] flex items-center justify-center"
                         >
-                            <ChevronRight className="w-6 h-6" />
+                            <span>₹{customBid}</span>
                         </button>
                     </div>
-
-                    {/* Big Bid Button */}
-                    <button 
-                        onClick={placeBid} 
-                        className="bg-[#FF6600] text-white w-36 py-4 rounded-[2rem] font-black text-4xl tracking-tighter shadow-2xl active:scale-95 transition-all hover:bg-[#ff8533] flex items-center justify-center border-4 border-white/10"
-                    >
-                        <span>₹{customBid}</span>
-                    </button>
                 </div>
             )}
         </div>
