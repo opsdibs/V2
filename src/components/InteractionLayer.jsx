@@ -372,8 +372,8 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       {/* CHAT STREAM (Lifted higher to clear the bottom dock) */}
       <div 
         ref={chatContainerRef} 
-        className="w-[55%] max-w-[14rem] h-64 overflow-y-auto pointer-events-auto pr-2 mb-2"
-        style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
+        className="w-[55%] max-w-[14rem] h-40 overflow-y-auto pointer-events-auto pr-2 mb-2"
+        style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 50%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
       >
           <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
             <AnimatePresence initial={false}>

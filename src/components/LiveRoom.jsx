@@ -332,7 +332,7 @@ export const LiveRoom = ({ roomId }) => {
                 {!isStreaming ? (
                     <button 
                         onClick={handleToggleStream}
-                        className="absolute bottom-4 right-4 pointer-events-auto bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60] mb-8"
+                        className="absolute bottom-32 right-4 pointer-events-auto bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60] mb-10"
                     >
                         <Radio className="w-4 h-4 text-red-600 animate-pulse" />
                         GO LIVE
@@ -340,7 +340,7 @@ export const LiveRoom = ({ roomId }) => {
                 ) : (
                     <button 
                         onClick={handleToggleStream}
-                        className="absolute bottom-4 right-4 pointer-events-auto bg-neutral-900/90 border border-red-500/50 text-red-500 px-6 py-3 rounded-full font-bold text-xs tracking-widest uppercase hover:bg-red-950 transition-colors z-[60]"
+                        className="absolute bottom-32 right-4 pointer-events-auto bg-neutral-900/90 border border-red-500/50 text-red-500 px-6 py-3 rounded-full font-bold text-xs tracking-widest uppercase hover:bg-red-950 transition-colors z-[60] mb-10"
                     >
                         END STREAM
                     </button>
