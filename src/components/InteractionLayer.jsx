@@ -429,7 +429,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
             {/* Item Card */}
             {/* CHANGE: Item Card moved to the BOTTOM (below Chat) */}
-            <div className="z-40 mb-4">
+                <div className="z-40 mb-4 relative">
                 <AnimatePresence>
                     {showInventory && isHost && (
                         <motion.div 
