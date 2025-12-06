@@ -286,7 +286,7 @@ export const LiveRoom = ({ roomId }) => {
         {/* Header */}
         <div className="flex justify-between items-start pointer-events-auto">
             <div className="flex flex-col items-start gap-2">
-                <img src="/Dibs. (1).svg" alt="Dibs" className="w-16" />
+                <img src="https://raw.githubusercontent.com/KenJose03/V2/main/public/Dibs%20(1).svg" alt="Dibs" className="w-16" />
                 <div className={`px-2 py-0.5 rounded-sm flex items-center gap-2 ${isStreaming ? 'bg-red-600' : 'bg-neutral-800'}`}>
                     <span className="font-display font-black text-xs uppercase tracking-widest text-white">
                         {isStreaming ? 'LIVE' : 'OFFLINE'}

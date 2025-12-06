@@ -55,6 +55,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const isAuctionActiveRef = useRef(false);
   const currentBidRef = useRef(0); 
   const currentItemRef = useRef(null); 
+  const stopTriggeredRef = useRef(false);
 
   // For enforcing bans/kicks
   const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false });
@@ -101,6 +102,10 @@ export const InteractionLayer = ({ roomId, isHost }) => {
             setIsAuctionActive(data.isActive);
             isAuctionActiveRef.current = data.isActive; 
             setEndTime(data.endTime || 0);
+            // NEW: Reset the stop trigger when auction starts
+            if (data.isActive) {
+                stopTriggeredRef.current = false;
+            }
         }
     });
 
@@ -151,7 +156,13 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
           setTimeLeft(remaining);
-          if (remaining === 0 && isHost) stopAuction();
+          // NEW: Only stop if we haven't already triggered it
+          if (remaining === 0 && isHost) {
+              if (!stopTriggeredRef.current) {
+                  stopTriggeredRef.current = true; // Lock it immediately
+                  stopAuction();
+              }
+          };
       }, 100);
       return () => clearInterval(interval);
   }, [isAuctionActive, endTime, isHost]);
@@ -282,16 +293,28 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const stopAuction = async () => {
       const finalPrice = currentBidRef.current;
       const item = INVENTORY.find(i => i.id === currentItemRef.current);
-      // 1. Fetch Winner
-      const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
-      const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
+      
       if (isAuctionActiveRef.current) { 
+        const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
+        const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
         // 2. NEW: Fetch session bids to calculate Top 3 for Moderator
         const bidsSnap = await get(ref(db, `rooms/${roomId}/currentAuctionBids`));
         let top3 = [];
         if (bidsSnap.exists()) {
-            const bids = Object.values(bidsSnap.val());
-            top3 = bids.sort((a, b) => b.amount - a.amount).slice(0, 3);
+            const allBids = Object.values(bidsSnap.val());
+            
+            // 1. Group by User (Keep only their highest bid)
+            const highestBidByUser = {};
+            allBids.forEach(bid => {
+                if (!highestBidByUser[bid.user] || bid.amount > highestBidByUser[bid.user].amount) {
+                    highestBidByUser[bid.user] = bid;
+                }
+            });
+
+            // 2. Convert back to array, Sort by Amount (Desc), Take Top 3
+            top3 = Object.values(highestBidByUser)
+                .sort((a, b) => b.amount - a.amount)
+                .slice(0, 3);
         }
 
         // 3. NEW: Push to History
