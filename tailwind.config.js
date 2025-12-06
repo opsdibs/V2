@@ -9,6 +9,7 @@ export default {
       fontFamily: {
         display: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
+        retro: ['Chunko', 'sans-serif'], 
       },
       colors: {
         'dibs-black': '#050505',

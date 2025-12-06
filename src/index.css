@@ -45,3 +45,7 @@ body {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
   mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
 }
+
+.font-retro {
+  font-family: 'Chunko', sans-serif !important;
+}

@@ -91,7 +91,12 @@ const CoinStackLoader = ({ onComplete }) => {
                transition={{ type: "spring", stiffness: 400, damping: 15 }}
                className="absolute inset-0 flex items-center justify-center z-50"
            >
-               <h1 className="font-display font-black text-7xl text-white tracking-tighter px-4 py-2">DIBS</h1>
+               <h1 
+                className="text-7xl font-retro font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal"
+                style={{ textShadow: '8px 8px 0px #000000' }}
+            >
+            DIBS!
+            </h1>
            </motion.div>
          )}
        </div>
@@ -115,7 +120,10 @@ const LoginScreen = () => {
       className="flex flex-col items-center justify-center w-full h-full px-6 z-20 relative bg-[#FF6600] text-white"
     >
         <div className="flex-1 flex flex-col items-center justify-center w-full relative px-6 space-y-2">
-            <h1 className="text-9xl font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal">
+            <h1 
+                className="text-9xl font-retro font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal"
+                style={{ textShadow: '8px 8px 0px #000000' }}
+            >
             DIBS!
             </h1>
             <p className="text-sm font-bold tracking-[0.3em] text-white uppercase font-sans opacity-90">
