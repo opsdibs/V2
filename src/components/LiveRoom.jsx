@@ -305,34 +305,48 @@ export const LiveRoom = ({ roomId }) => {
                         <Shield className="w-4 h-4" />
                      </button>
                  )}
-                 {isHost && (
-                     <>
-                        {cameras.length > 1 && (
-                            <button onClick={switchCamera} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
-                                <RefreshCw className="w-4 h-4" />
-                            </button>
-                        )}
-                        <button onClick={toggleMic} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
-                            {isMicOn ? <Mic className="w-4 h-4"/> : <MicOff className="w-4 h-4 text-red-500"/>}
-                        </button>
-                        <button onClick={toggleCam} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
-                            {isCamOn ? <VideoIcon className="w-4 h-4"/> : <VideoOff className="w-4 h-4 text-red-500"/>}
-                        </button>
-                     </>
+                 {!isHost && (
+                    <button onClick={() => navigate('/')} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
+                        <X className="w-4 h-4" />
+                    </button>
                  )}
-                 <button onClick={() => navigate('/')} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
-                    <X className="w-4 h-4" />
-                </button>
             </div>
         </div>
 
         {/* HOST STREAM CONTROLS (Bottom Right) */}
         {isHost && videoReady && (
-            <>
+            <div className="absolute bottom-32 right-4 z-[60] flex flex-col items-end gap-4 pointer-events-auto mb-10">
+                
+                {/* Utility Buttons Stack (Exit, Switch Cam, Cam, Mic) */}
+                <div className="flex flex-col gap-2 items-end">
+                    {/* Exit Button */}
+                    <button onClick={() => navigate('/')} className="bg-black/60 p-3 rounded-full hover:bg-red-600 hover:text-white transition-colors backdrop-blur border border-white/10 shadow-lg group" title="Exit Room">
+                        <X className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    </button>
+
+                    {/* Switch Camera */}
+                    {cameras.length > 1 && (
+                        <button onClick={switchCamera} className="bg-black/60 p-3 rounded-full hover:bg-white hover:text-black transition-colors backdrop-blur border border-white/10 shadow-lg">
+                            <RefreshCw className="w-5 h-5" />
+                        </button>
+                    )}
+                    
+                    {/* Toggle Camera */}
+                    <button onClick={toggleCam} className={`p-3 rounded-full backdrop-blur border shadow-lg transition-colors ${isCamOn ? 'bg-black/60 border-white/10 text-white hover:bg-white hover:text-black' : 'bg-red-500/20 border-red-500 text-red-500'}`}>
+                        {isCamOn ? <VideoIcon className="w-5 h-5"/> : <VideoOff className="w-5 h-5"/>}
+                    </button>
+
+                    {/* Toggle Mic */}
+                    <button onClick={toggleMic} className={`p-3 rounded-full backdrop-blur border shadow-lg transition-colors ${isMicOn ? 'bg-black/60 border-white/10 text-white hover:bg-white hover:text-black' : 'bg-red-500/20 border-red-500 text-red-500'}`}>
+                        {isMicOn ? <Mic className="w-5 h-5"/> : <MicOff className="w-5 h-5"/>}
+                    </button>
+                </div>
+
+                {/* GO LIVE / END STREAM BUTTON */}
                 {!isStreaming ? (
                     <button 
                         onClick={handleToggleStream}
-                        className="absolute bottom-32 right-4 pointer-events-auto bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60] mb-10"
+                        className="bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2"
                     >
                         <Radio className="w-4 h-4 text-red-600 animate-pulse" />
                         GO LIVE
@@ -340,12 +354,12 @@ export const LiveRoom = ({ roomId }) => {
                 ) : (
                     <button 
                         onClick={handleToggleStream}
-                        className="absolute bottom-32 right-4 pointer-events-auto bg-neutral-900/90 border border-red-500/50 text-red-500 px-6 py-3 rounded-full font-bold text-xs tracking-widest uppercase hover:bg-red-950 transition-colors z-[60] mb-10"
+                        className="bg-neutral-900/90 border border-red-500/50 text-red-500 px-6 py-3 rounded-full font-bold text-xs tracking-widest uppercase hover:bg-red-950 transition-colors"
                     >
                         END STREAM
                     </button>
                 )}
-            </>
+            </div>
         )}
         {/* MODERATOR OVERLAY */}
         {isModerator && showModPanel && (
