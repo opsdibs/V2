@@ -64,6 +64,13 @@ export const LiveRoom = ({ roomId }) => {
   const isRunning = useRef(false);
 
   useEffect(() => {
+    document.body.style.backgroundColor = "black";
+    return () => {
+      document.body.style.backgroundColor = "";
+    };
+  }, []);
+
+  useEffect(() => {
     if (isRunning.current) return;
     isRunning.current = true;
 
@@ -258,7 +265,7 @@ export const LiveRoom = ({ roomId }) => {
     <div className="fixed inset-0 w-full h-[100dvh] bg-black text-white overflow-hidden supports-[height:100dvh]:h-[100dvh]">
       
       {/* LAYER 1: VIDEO */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 max-w-md mx-auto w-full bg-black">
         <div id="local-video-container" className={`w-full h-full ${!isHost ? 'hidden' : ''}`}></div>
         <div id="remote-video-container" className={`w-full h-full ${isHost ? 'hidden' : ''}`}></div>
         
@@ -281,7 +288,7 @@ export const LiveRoom = ({ roomId }) => {
       <InteractionLayer roomId={roomId} isHost={isHost} />
 
       {/* LAYER 3: SYSTEM CONTROLS */}
-      <div className="absolute inset-0 z-50 pointer-events-none p-4 flex flex-col justify-between">
+      <div className="absolute inset-0 z-50 pointer-events-none p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex flex-col justify-between max-w-md mx-auto w-full">
         
         {/* Header */}
         <div className="flex justify-between items-start pointer-events-auto">
