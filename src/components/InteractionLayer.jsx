@@ -47,7 +47,7 @@ const quirky_usernames = [
     "Conscious_Closet", "Upcycle_Psycho", "Button_Masher", "Zipper_Ripper", "Fabric_Phantom"
 ];
 
-export const InteractionLayer = ({ roomId, isHost }) => {
+export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [currentBid, setCurrentBid] = useState(0);
@@ -146,19 +146,28 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); unsubItem(); };
   }, [roomId]);
 
-  // --- PRESENCE SYSTEM ---
+  // --- SYNC LOGIC (With Consistent Hashing) ---
   useEffect(() => {
-      if (!isHost) {
-          // Use the persistent ID if available, otherwise fallback (prevents ReferenceError)
-          const userId = persistentUserId || Math.random().toString(36).substring(2, 15);
-          
-          const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
-          set(myPresenceRef, true);
-          onDisconnect(myPresenceRef).remove();
-          
-          return () => { remove(myPresenceRef); };
+      if (isHost) {
+          setUsername("HOST");
+      } else if (isModerator) {
+          setUsername("MODERATOR"); // <--- NEW CHECK
+      } else {
+          if (persistentUserId) {
+              // Deterministic Name: Generate consistent index from ID string
+              let hash = 0;
+              for (let i = 0; i < persistentUserId.length; i++) {
+                  hash = persistentUserId.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const index = Math.abs(hash) % quirky_usernames.length;
+              setUsername(quirky_usernames[index]);
+          } else {
+              // Fallback random
+              const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
+              setUsername(randomName);
+          }
       }
-  }, [roomId, isHost, persistentUserId]); // <--- Added persistentUserId dependency
+  }, [isHost, isModerator, persistentUserId]); // Added isModerator to dependencies
 
   useEffect(() => {
       if (!isAuctionActive || !endTime) {

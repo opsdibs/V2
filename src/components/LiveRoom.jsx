@@ -285,7 +285,7 @@ export const LiveRoom = ({ roomId }) => {
       </div>
 
       {/* LAYER 2: INTERACTION */}
-      <InteractionLayer roomId={roomId} isHost={isHost} />
+      <InteractionLayer roomId={roomId} isHost={isHost} isModerator={isModerator} />
 
       {/* LAYER 3: SYSTEM CONTROLS */}
       <div className="absolute inset-0 z-50 pointer-events-none p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex flex-col justify-between max-w-md mx-auto w-full">
