@@ -31,6 +31,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [users, setUsers] = useState([]);
   const [history, setHistory] = useState([]);
   const [onlineIds, setOnlineIds] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
   // 1. Fetch & Process Audience List
@@ -144,20 +145,29 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     <div className="absolute top-20 left-4 right-4 bottom-32 bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden flex flex-col z-50 pointer-events-auto shadow-2xl">
       
       {/* Header */}
-      {/* Header */}
       <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900">
         <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-blue-500" />
-            <span className="font-bold text-white uppercase tracking-wider">Mod Panel</span>
+            <span className="font-bold text-white uppercase tracking-wider hidden sm:block">Mod Panel</span>
         </div>
         
         <div className="flex items-center gap-2">
+            {/* SEARCH BAR (New) */}
+            {activeTab === 'users' && (
+                <input 
+                    type="text" 
+                    placeholder="Search user..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white/30 w-24 sm:w-32 transition-all placeholder:text-zinc-600"
+                />
+            )}
+
             <div className="flex bg-black rounded-lg p-1 gap-1">
-                <button onClick={() => setActiveTab('users')} className={`px-4 py-1 rounded text-xs font-bold uppercase ${activeTab === 'users' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-white'}`}>Viewers</button>
-                <button onClick={() => setActiveTab('history')} className={`px-4 py-1 rounded text-xs font-bold uppercase ${activeTab === 'history' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-white'}`}>History</button>
+                <button onClick={() => setActiveTab('users')} className={`px-3 py-1 rounded text-[10px] font-bold uppercase ${activeTab === 'users' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-white'}`}>Viewers</button>
+                <button onClick={() => setActiveTab('history')} className={`px-3 py-1 rounded text-[10px] font-bold uppercase ${activeTab === 'history' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-white'}`}>History</button>
             </div>
             
-            {/* Close Button */}
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-zinc-400 hover:text-white">
                 <X className="w-5 h-5" />
             </button>
@@ -168,7 +178,14 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         
         {/* VIEWERS TAB */}
-        {activeTab === 'users' && users.map(user => (
+        {activeTab === 'users' && users
+            .filter(user => {
+                if (!searchTerm) return true;
+                const term = searchTerm.toLowerCase();
+                const name = getQuirkyName(user.userId).toLowerCase();
+                const id = user.userId.toLowerCase();
+                return name.includes(term) || id.includes(term);
+            }).map(user => (
             <div 
                 key={user.userId}
                 // CHANGE: Add opacity-50 if offline 

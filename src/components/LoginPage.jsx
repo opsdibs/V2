@@ -34,12 +34,11 @@ export const LoginPage = () => {
     }
 
     // Define Credentials
-    const HOST_EMAIL = import.meta.env.VITE_HOST_EMAIL || "ops@brownietech.in";
-    const HOST_PWD = import.meta.env.VITE_HOST_PWD || "admin123"; // Default fallback
+    const HOST_EMAIL = import.meta.env.VITE_HOST_EMAIL;
+    const HOST_PWD = import.meta.env.VITE_HOST_PWD;
     
-    const MOD_EMAIL = import.meta.env.VITE_MODERATOR_EMAIL || "mod@brownietech.in";
-    const MOD_PWD = import.meta.env.VITE_MODERATOR_PWD || "mod123"; // Default fallback
-
+    const MOD_EMAIL = import.meta.env.VITE_MODERATOR_EMAIL;
+    const MOD_PWD = import.meta.env.VITE_MODERATOR_PWD;    
     let finalRole = role; 
     let userId;
     let userPhone = phone; // Store phone for audience, empty for host
