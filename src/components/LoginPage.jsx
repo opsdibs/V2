@@ -2,10 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Lock, Phone, Mail, AlertCircle } from 'lucide-react';
-import { ref, push, set } from 'firebase/database';
+import { ref, push, set, get } from 'firebase/database';
 import { db } from '../lib/firebase';
-import Papa from 'papaparse';
-import guestListRaw from '../guests.csv?raw'; // Importing with ?raw gives us the text content
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -61,40 +59,31 @@ export const LoginPage = () => {
             return;
         }
     }
+    // AUDIENCE CHECK (Secure Direct Database Lookup)
     else {
-            // --- NEW CSV VERIFICATION LOGIC ---
-        // Parse the CSV data
-        const results = Papa.parse(guestListRaw, { header: true, skipEmptyLines: true });
-        const guestList = results.data;
+        // 1. Clean input to match DB format (Last 10 digits)
+        const cleanInputPhone = phone.replace(/\D/g, '').slice(-10);
+        
+        // 2. Direct lookup: Check if this specific phone number exists as a key
+        const guestRef = ref(db, `allowed_guests/${cleanInputPhone}`);
+        const snapshot = await get(guestRef);
 
-        // Normalize Input Data
-        const inputPhoneClean = phone.replace(/\D/g, ''); // Remove non-digits
-        const inputEmailClean = email.trim().toLowerCase();
+        if (!snapshot.exists()) {
+             setError("Phone number not registered.");
+             setLoading(false); 
+             return;
+        }
 
-        // Check for match
-        const isRegistered = guestList.some(guest => {
-            // Get guest details from CSV columns (headers must match CSV exactly)
-            const guestEmail = (guest.email || '').trim().toLowerCase();
-            const guestPhoneRaw = (guest.phone_number || '').toString();
-            const guestPhoneClean = guestPhoneRaw.replace(/\D/g, '');
-
-            // We check if the input phone matches the guest phone (handling potential +91 prefixes)
-            // We verify if the cleaned CSV phone *ends with* the input phone (last 10 digits usually)
-            const phoneMatch = guestPhoneClean.endsWith(inputPhoneClean) || inputPhoneClean.endsWith(guestPhoneClean);
-            const emailMatch = guestEmail === inputEmailClean;
-
-            return phoneMatch && emailMatch;
-        });
-
-        if (!isRegistered) {
-            setError("You haven't registered. Please contact support.");
-            setLoading(false);
+        // 3. Verify Email Match
+        const guestData = snapshot.val();
+        if (guestData.email.toLowerCase() !== email.trim().toLowerCase()) {
+            setError("Email does not match our records.");
+            setLoading(false); 
             return;
         }
-        // ----------------------------------
 
-        const cleanPhone = phone.replace(/\D/g, '').slice(-10); 
-        userId = `USER-${cleanPhone}`;
+        // 4. Success
+        userId = `USER-${cleanInputPhone}`;
     }
     try {
         // Save session data to Firebase (So Moderator can see this user in the list)
