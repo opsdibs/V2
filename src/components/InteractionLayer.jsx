@@ -615,9 +615,16 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
 
         {/* RIGHT COLUMN: Auction & Bids */}
             <div className="flex flex-col gap-2 pointer-events-auto items-end w-[40%] max-w-[10rem]"> 
-            {/* Host Start/Stop - Pushed up by pb-16 to leave room for Go Live */}
+            {/* Host Start/Stop Button */}
             {isHost && (
-                <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg mb-24 ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
+                <button 
+                    onClick={toggleAuction} 
+                    // CHANGE 1: Changed 'fixed' to 'absolute' so it stays inside the mobile view (max-w-md)
+                    // CHANGE 2: Added 'pointer-events-auto' to ensure it catches clicks
+                    className={`absolute right-4 h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg z-50 pointer-events-auto ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}
+                    // CHANGE 3: Positioned at 3rem (Below the Go Live button which is at 6rem)
+                    style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}
+                >
                     {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
                     {isAuctionActive ? "STOP" : "START"}
                 </button>
@@ -627,14 +634,14 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
             {!isHost && (
                 <div className={`flex flex-col items-center gap-2 transition-all duration-300 ${isAuctionActive ? 'opacity-100' : 'opacity-100'}`}>
                     
-                    {/* CHANGE: Grouped Controls into one Black Container */}
+                   
                     <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
                         
                         {/* Top Row: Minus and Plus Buttons */}
                         <div className="flex items-center justify-between px-2 py-2">
                             <button 
                                 onClick={handleDecrease} 
-                                // CHANGE: Disable if auction inactive OR min bid reached
+                                
                                 disabled={!isAuctionActive || customBid <= currentBid + 10}
                                 className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + 10) ? 'cursor-not-allowed' : ''}`}
                             >
@@ -643,7 +650,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
 
                             <button 
                                 onClick={handleIncrease} 
-                                // CHANGE: Disable if auction inactive
+                                
                                 disabled={!isAuctionActive}
                                 className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!isAuctionActive ? 'cursor-not-allowed' : ''}`}
                             >
@@ -651,7 +658,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
                             </button>
                         </div>
 
-                        {/* Bottom: Orange Bid Button (Inside the container) */}
+                        
                         <button 
                             onClick={placeBid} 
                             disabled={!isAuctionActive}
