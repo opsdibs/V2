@@ -81,14 +81,18 @@ export const LiveRoom = ({ roomId }) => {
       try {
         setStatus("CONNECTING...");
         
-        // --- NEW TOKEN FETCHING LOGIC ---
-        // 1. Fetch Token from our Backend API
-        const response = await fetch(`/api/token?channelName=${roomId || 'CHIC'}`);
-        const data = await response.json();
-        
-        if (!data.token) throw new Error("Failed to get Agora Token");
-        const token = data.token;
-        // --------------------------------
+        // 1. Try fetching from Backend API
+            const response = await fetch(`/api/token?channelName=${roomId || 'CHIC'}`);
+            
+            // 2. CHECK STATUS BEFORE PARSING
+            if (response.ok) {
+                const data = await response.json();
+                if (data.token) token = data.token;
+            } else {
+                console.warn(`Server API Error: ${response.status} ${response.statusText}`);
+            }
+        } catch (err) {
+            console.error("API Token Fetch Failed:", err);
 
         // 2. Create Client (Existing Code)
         myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
