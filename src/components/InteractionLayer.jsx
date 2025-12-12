@@ -171,21 +171,23 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
 
   // --- PRESENCE SYSTEM ---
   useEffect(() => {
-      if (!isHost) {
-          // Use the persistent ID from URL (or fallback to random if missing)
-          const userId = persistentUserId || Math.random().toString(36).substring(2, 15);
-          
+      if (!isHost && persistentUserId) {
           // Reference to this specific user in the viewers list
-          const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
+          // CRITICAL: Use the EXACT persistentUserId from the URL
+          const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${persistentUserId}`);
           
-          // 1. Add self to list
+          // 2. Set Status to Online
           set(myPresenceRef, true);
           
-          // 2. Setup auto-remove on disconnect (closing tab/internet loss)
+          // 3. Setup auto-remove on disconnect
           onDisconnect(myPresenceRef).remove();
           
-          // 3. Cleanup on component unmount
+          // 4. Cleanup on component unmount
           return () => { remove(myPresenceRef); };
+      }
+      // Debugging: Warn if a viewer has no ID
+      else if (!isHost && !persistentUserId) {
+          console.error("PRESENCE ERROR: No persistentUserId found for viewer!");
       }
   }, [roomId, isHost, persistentUserId]);
 
