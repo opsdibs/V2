@@ -2,7 +2,6 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './components/LoginPage';
 import { LiveRoom } from './components/LiveRoom';
-import { WelcomePage } from './components/WelcomePage'; // Keep if you use it, or remove
 
 function App() {
   return (

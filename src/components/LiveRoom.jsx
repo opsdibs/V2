@@ -27,7 +27,7 @@ export const LiveRoom = ({ roomId }) => {
             const snapshot = await get(ref(db, `audience_data/${roomId}/${dbKey}`));
             if (snapshot.exists()) {
                 const data = snapshot.val();
-                setVerifiedRole(data.role); // 'host', 'moderator', or 'audience'
+                setVerifiedRole(data.role); // 'host', 'moderator', 'spectator', or 'audience'
             } else {
                 console.warn("Invalid Session Key");
                 navigate('/'); // Fake/Old key
@@ -45,6 +45,7 @@ export const LiveRoom = ({ roomId }) => {
   // Derived Permissions (Source of Truth)
   const isHost = verifiedRole === 'host';
   const isModerator = verifiedRole === 'moderator';
+  const isSpectator = verifiedRole === 'spectator'; // <--- NEW: Calculate Spectator Status
   
   // Connection States
   const [joined, setJoined] = useState(false);     
@@ -72,7 +73,6 @@ export const LiveRoom = ({ roomId }) => {
 
   // --- KILL SWITCH LISTENER ---
   useEffect(() => {
-    // Host controls this, so they don't need to listen
     if (isHost) return; 
 
     const liveStatusRef = ref(db, `rooms/${roomId}/isLive`);
@@ -80,11 +80,9 @@ export const LiveRoom = ({ roomId }) => {
     const unsub = onValue(liveStatusRef, async (snapshot) => {
       const isLive = snapshot.val();
       
-      // If Host set isLive = false, and we are currently connected...
       if (isLive === false && clientRef.current && joined) {
           console.log("Stream ended by Host. Disconnecting...");
           try {
-            // FORCE LEAVE CHANNEL
             await clientRef.current.leave(); 
             setJoined(false);
             setIsStreaming(false);
@@ -94,7 +92,6 @@ export const LiveRoom = ({ roomId }) => {
             console.error("Auto-leave failed:", err);
           }
       }
-      // Optional: Auto-rejoin if it goes live again (logic can be added here if needed)
     });
 
     return () => unsub();
@@ -111,14 +108,10 @@ export const LiveRoom = ({ roomId }) => {
       try {
         setStatus("CONNECTING...");
         
-        // --- TOKEN STRATEGY ---
         let token = null;
 
         try {
-            // 1. Try fetching from Backend API
             const response = await fetch(`/api/token?channelName=${roomId || 'CHIC'}`);
-            
-            // 2. CHECK STATUS BEFORE PARSING
             if (response.ok) {
                 const data = await response.json();
                 if (data.token) token = data.token;
@@ -129,15 +122,13 @@ export const LiveRoom = ({ roomId }) => {
             console.error("API Token Fetch Failed:", err);
         }
 
-        // 3. FALLBACK: Use Static Token if API failed
         if (!token) {
             console.warn("⚠️ Using Static Fallback Token");
-            token = AGORA_TOKEN; // From settings.js
+            token = AGORA_TOKEN; 
         }
 
         if (!token) throw new Error("No Agora Token found");
 
-        // 2. Create Client (Existing Code)
         myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
         clientRef.current = myClient;
 
@@ -148,7 +139,6 @@ export const LiveRoom = ({ roomId }) => {
           await myClient.setClientRole("audience", { level: 2 });
         }
 
-        // 2. Listeners
         myClient.on("user-published", async (user, mediaType) => {
           if (!isActive) return;
           await myClient.subscribe(user, mediaType);
@@ -168,27 +158,23 @@ export const LiveRoom = ({ roomId }) => {
              if (mediaType === 'video') setIsStreaming(false);
         });
 
-        // 3. Join
         await myClient.join(AGORA_APP_ID, roomId, token, null);
         if (isActive) setJoined(true);
 
-        // 4. Host Setup
         if (isHost) {
           setStatus("STARTING CAMERA...");
           
-          // FIX: Declare variables in outer scope to avoid ReferenceError
           let micTrack, camTrack;
           
           try {
-             // Try HD
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
                  { 
                     encoderConfig: {
                         width: 1280,
                         height: 720,
-                        frameRate: 60,      // <--- 60 FPS
-                        bitrateMin: 2000,   // Higher bitrate for smooth motion
+                        frameRate: 60,
+                        bitrateMin: 2000,
                         bitrateMax: 4000
                     }
                  } 
@@ -197,7 +183,6 @@ export const LiveRoom = ({ roomId }) => {
              camTrack = tracks[1];
           } catch (e) {
              console.warn("HD failed, retrying SD...");
-             // Fallback SD
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
              micTrack = tracks[0];
              camTrack = tracks[1];
@@ -209,7 +194,7 @@ export const LiveRoom = ({ roomId }) => {
               return; 
           }
 
-          localTracksRef.current = { audio: micTrack, video: camTrack }; // SYNC REF
+          localTracksRef.current = { audio: micTrack, video: camTrack };
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
@@ -229,7 +214,6 @@ export const LiveRoom = ({ roomId }) => {
 
     initAgora();
 
-    // CLEANUP
     return () => {
       isActive = false;
       isRunning.current = false;
@@ -253,7 +237,6 @@ export const LiveRoom = ({ roomId }) => {
     };
   }, [roomId, isHost]);
 
-  // --- TOGGLE STREAMING ---
   const handleToggleStream = async () => {
       if (!clientRef.current) {
           console.error("Client Ref is null");
@@ -268,7 +251,6 @@ export const LiveRoom = ({ roomId }) => {
               await clientRef.current.unpublish(tracks);
               setIsStreaming(false);
               setStatus("READY TO AIR");
-              // NEW: KILL SWITCH TRIGGER (Signals everyone to leave)
               await update(ref(db, `rooms/${roomId}`), { isLive: false });
           } else {
               setStatus("PUBLISHING...");
@@ -278,7 +260,6 @@ export const LiveRoom = ({ roomId }) => {
               await clientRef.current.publish(tracks);
               setIsStreaming(true);
               setStatus("LIVE");
-              // NEW: SIGNAL LIVE STATUS
               await update(ref(db, `rooms/${roomId}`), { isLive: true });
           }
       } catch (err) {
@@ -287,7 +268,6 @@ export const LiveRoom = ({ roomId }) => {
       }
   };
 
-  // --- CAMERA SWITCH ---
   const switchCamera = async () => {
       if (!localTracksRef.current.video || cameras.length <= 1) return;
       try {
@@ -353,13 +333,17 @@ export const LiveRoom = ({ roomId }) => {
         )}
       </div>
 
-      {/* LAYER 2: INTERACTION */}
-      <InteractionLayer roomId={roomId} isHost={isHost} isModerator={isModerator} />
+      {/* LAYER 2: INTERACTION - UPDATED TO PASS SPECTATOR PROP */}
+      <InteractionLayer 
+          roomId={roomId} 
+          isHost={isHost} 
+          isModerator={isModerator}
+          isSpectator={isSpectator} 
+      />
 
       {/* LAYER 3: SYSTEM CONTROLS */}
       <div className="absolute inset-0 z-50 pointer-events-none p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex flex-col justify-between max-w-md mx-auto w-full">
         
-        {/* Header */}
         <div className="flex justify-between items-start pointer-events-auto">
             <div className="flex flex-col items-start gap-2">
                 <img src="/Dibs. (1).svg" alt="Dibs" className="w-16" />
@@ -371,7 +355,6 @@ export const LiveRoom = ({ roomId }) => {
             </div>
             
             <div className="flex items-center gap-2">
-                 {/* MODERATOR TOGGLE BUTTON */}
                  {isModerator && (
                      <button 
                         onClick={() => setShowModPanel(!showModPanel)} 
@@ -402,7 +385,6 @@ export const LiveRoom = ({ roomId }) => {
             </div>
         </div>
 
-        {/* HOST STREAM CONTROLS (Bottom Right) */}
         {isHost && videoReady && (
             <>
                 {!isStreaming ? (
@@ -410,7 +392,6 @@ export const LiveRoom = ({ roomId }) => {
                         onClick={handleToggleStream}
                         className="absolute right-4 pointer-events-auto bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60]"
                         style={{ bottom: 'calc(8.5rem + env(safe-area-inset-bottom))' }}
-
                     >
                         <Radio className="w-4 h-4 text-red-600 animate-pulse" />
                         GO LIVE
@@ -426,7 +407,7 @@ export const LiveRoom = ({ roomId }) => {
                 )}
             </>
         )}
-        {/* MODERATOR OVERLAY */}
+        
         {isModerator && showModPanel && (
           <ModeratorPanel roomId={roomId} onClose={() => setShowModPanel(false)} />
         )}

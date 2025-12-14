@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, AlertCircle, Key, Mail, Clock, Lock } from 'lucide-react'; // Added Clock/Lock
+import { ArrowRight, AlertCircle, Key, Mail, Lock, X } from 'lucide-react';
 import { ref, push, set, get } from 'firebase/database';
 import { db } from '../lib/firebase';
 
@@ -103,53 +103,32 @@ const CoinStackLoader = ({ onComplete }) => {
   );
 };
 
-// --- 2. WAITING ROOM SCREEN (HYPE MODE) ---
+// --- 2. WAITING ROOM SCREEN ---
 const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
     const [timeLeft, setTimeLeft] = useState(null);
     const [quip, setQuip] = useState("PREPARING THE AUCTION BLOCK...");
 
-    // Quirky messages to show randomly
     const QUIPS = [
-    "SHARPENING THE GAVEL...",
-    "POLISHING THE GOODS...",
-    "COUNTING THE COINS...",
-    "CALM DOWN, IT'S COMING.",
-    "PATIENCE PAYS OFF.",
-    "NOT YET, TIGER.",
-    "GOOD THINGS TAKE TIME.",
-    "STEAMING THE SILK...",
-    "DIGGING IN THE BINS...",
-    "UNTANGLING HANGERS...",
-    "CHECKING THE POCKETS...",
-    "DUSTING OFF THE GRAILS...",
-    "LOADING THE DRIP...",
-    "WALLETS AT THE READY...",
-    "PREPPING THE SNIPE...",
-    "HOLD YOUR HORSES...",
-    "SECURE THE BAG...",
-    "HYPE INCOMING...",
-    "THRIFT GODS ARE BUSY...",
-    "DON'T BLINK...",
-    "WAKING THE AUCTIONEER...",
+    "SHARPENING THE GAVEL...", "POLISHING THE GOODS...", "COUNTING THE COINS...",
+    "CALM DOWN, IT'S COMING.", "PATIENCE PAYS OFF.", "NOT YET, TIGER.",
+    "GOOD THINGS TAKE TIME.", "STEAMING THE SILK...", "DIGGING IN THE BINS...",
+    "UNTANGLING HANGERS...", "CHECKING THE POCKETS...", "DUSTING OFF THE GRAILS...",
+    "LOADING THE DRIP...", "WALLETS AT THE READY...", "PREPPING THE SNIPE...",
+    "HOLD YOUR HORSES...", "SECURE THE BAG...", "HYPE INCOMING...",
+    "THRIFT GODS ARE BUSY...", "DON'T BLINK...", "WAKING THE AUCTIONEER...",
     "CURATING THE CHAOS..."
     ];
 
-    // 1. CYCLE QUIPS EVERY 10 SECONDS
     useEffect(() => {
-        // Set initial random quip
         setQuip(QUIPS[Math.floor(Math.random() * QUIPS.length)]);
-
         const interval = setInterval(() => {
             setQuip(QUIPS[Math.floor(Math.random() * QUIPS.length)]);
-        }, 10000); // 10000ms = 10s
-
+        }, 10000); 
         return () => clearInterval(interval);
     }, []);
 
-    // 2. COUNTDOWN TIMER
     useEffect(() => {
         if (!nextEvent) return;
-
         const interval = setInterval(() => {
             const now = new Date().getTime();
             const target = new Date(nextEvent).getTime();
@@ -159,13 +138,9 @@ const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
                 clearInterval(interval);
                 if (onTimerFinished) onTimerFinished();
             } else {
-                // FIX: Calculate TOTAL HOURS (remove the % 24 hours logic)
-                // This ensures "1 Day 2 Hours" shows as "26 HRS" instead of "02 HRS"
                 const hours = Math.floor(distance / (1000 * 60 * 60));
-                
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                
                 setTimeLeft({ h: hours, m: minutes, s: seconds });
             }
         }, 1000);
@@ -184,8 +159,6 @@ const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
                 <h1 className="text-5xl font-display font-black text-white uppercase tracking-tight leading-none">
                     DOORS<br/>LOCKED
                 </h1>
-                
-                {/* THE COUNTDOWN DISPLAY */}
                 {timeLeft ? (
                     <div className="flex items-center justify-center gap-4 font-mono text-4xl font-bold text-white tabular-nums">
                         <div className="flex flex-col items-center">
@@ -206,12 +179,10 @@ const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
                 ) : (
                     <div className="animate-pulse font-mono text-xl">CALCULATING...</div>
                 )}
-
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/80 border-t border-b border-white/20 py-4 max-w-xs mx-auto animate-pulse">
                     {quip}
                 </p>
             </div>
-
             {nextEvent && (
                 <div className="absolute bottom-10 font-mono text-[10px] text-white/40 uppercase">
                     Event Starts: {new Date(nextEvent).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -227,7 +198,7 @@ export const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('room') || "CHIC";
 
-  const [currentScreen, setCurrentScreen] = useState('splash'); // splash | login | waiting
+  const [currentScreen, setCurrentScreen] = useState('splash'); 
   const [waitingMessage, setWaitingMessage] = useState("");
   const [nextEventTime, setNextEventTime] = useState(null);
 
@@ -236,6 +207,10 @@ export const LoginPage = () => {
   const [authKey, setAuthKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // Spectator Modal State
+  const [showSpectatorModal, setShowSpectatorModal] = useState(false);
+  const [tempCredentials, setTempCredentials] = useState({ email: "", phone: "" });
 
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -247,6 +222,7 @@ export const LoginPage = () => {
     const inputEmail = email.trim().toLowerCase();
     const inputKey = authKey.trim();
 
+    // --- 1. FORMAT VALIDATION ---
     if (!validateEmail(inputEmail)) { 
         setError("Invalid Email Format"); 
         setLoading(false); return; 
@@ -262,58 +238,59 @@ export const LoginPage = () => {
     const MOD_EMAIL = (import.meta.env.VITE_MODERATOR_EMAIL || "").toLowerCase();
     const MOD_PWD = import.meta.env.VITE_MODERATOR_PWD;
 
-    let finalRole = 'audience';
-    let userId = '';
-    let userPhone = '';
-
-    // --- 1. HOST/MOD CHECK (ALWAYS ALLOWED) ---
+    // --- 2. HOST/MOD CHECK (Bypass Everything) ---
     if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
-         finalRole = 'host'; userId = 'HOST'; userPhone = 'N/A';
-         await joinRoom(finalRole, userId, userPhone, inputEmail);
-         return;
+         await joinRoom('host', 'HOST', 'N/A', inputEmail); return;
     }
     if (inputEmail === MOD_EMAIL && inputKey === MOD_PWD) {
-         finalRole = 'moderator'; userId = 'MODERATOR'; userPhone = 'N/A';
-         await joinRoom(finalRole, userId, userPhone, inputEmail);
-         return;
+         await joinRoom('moderator', 'MODERATOR', 'N/A', inputEmail); return;
     }
 
-    // --- 2. AUDIENCE GATEKEEPER ---
+    // --- 3. PHONE CLEANING ---
     const cleanPhone = inputKey.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length < 10) {
         setError("Invalid Phone Number"); setLoading(false); return;
     }
 
+    // ============================================================
+    // 🛠️ DEV BYPASS: Force Spectator Mode for Testing
+    // Type '0000000000' as phone to skip DB/Time checks
+    if (cleanPhone === "1212121212") {
+        console.log("⚠️ DEV MODE: Forcing Spectator Modal");
+        setTempCredentials({ email: inputEmail, phone: cleanPhone });
+        setLoading(false);
+        setShowSpectatorModal(true); 
+        return;
+    }
+    // ============================================================
+
     try {
-        // A. Check TEST LIST (Always Allowed)
+        // --- 4. BLOCK LIST CHECK (Global Ban) ---
+        // Checks 'blocked_users/9876543210'. If exists, deny entry.
+        const blockedRef = ref(db, `blocked_users/${cleanPhone}`);
+        const blockSnap = await get(blockedRef);
+        
+        if (blockSnap.exists()) {
+            setError("ACCESS DENIED. You are blocked.");
+            setLoading(false);
+            return;
+        }
+
+        // --- 5. TEST USER CHECK (Bypass Time) ---
         const testGuestRef = ref(db, `test_allowed_guests/${cleanPhone}`);
         const testSnapshot = await get(testGuestRef);
 
         if (testSnapshot.exists()) {
              if (testSnapshot.val().email.toLowerCase() === inputEmail) {
-                 console.log("Test User Detected - Bypassing Time Check");
-                 finalRole = 'audience';
-                 userId = `TEST-${cleanPhone}`;
-                 userPhone = cleanPhone;
-                 await joinRoom(finalRole, userId, userPhone, inputEmail);
+                 await joinRoom('audience', `TEST-${cleanPhone}`, cleanPhone, inputEmail);
                  return;
              } else {
                  setError("Test Email mismatch."); setLoading(false); return;
              }
         }
 
-        // B. Check REGULAR LIST (Time Restricted)
-        const guestRef = ref(db, `allowed_guests/${cleanPhone}`);
-        const snapshot = await get(guestRef);
-
-        if (!snapshot.exists()) {
-            setError("Phone number not registered."); setLoading(false); return;
-        }
-        if (snapshot.val().email.toLowerCase() !== inputEmail) {
-            setError("Email does not match records."); setLoading(false); return;
-        }
-
-        // C. TIME CHECK
+        // --- 6. TIME GATE (Applies to Registered AND Spectators) ---
+        // If we reached here, you are NOT a test user, so you must obey time.
         const configRef = ref(db, `event_config`);
         const configSnap = await get(configRef);
         
@@ -323,44 +300,71 @@ export const LoginPage = () => {
             const start = new Date(config.startTime);
             const end = new Date(config.endTime);
 
-            // Maintenance Mode?
             if (config.isMaintenanceMode) {
                 setWaitingMessage("SYSTEM UNDER MAINTENANCE.");
-                setCurrentScreen('waiting');
-                setLoading(false);
-                return;
+                setCurrentScreen('waiting'); setLoading(false); return;
             }
-
-            // Too Early?
             if (now < start) {
                 setWaitingMessage("WAIT FOR THE NEXT DROP.");
                 setNextEventTime(config.startTime);
-                setCurrentScreen('waiting');
-                setLoading(false);
-                return;
+                setCurrentScreen('waiting'); setLoading(false); return;
             }
-
-            // Too Late?
             if (now > end) {
                 setWaitingMessage("THIS EVENT HAS ENDED.");
-                setCurrentScreen('waiting');
-                setLoading(false);
-                return;
+                setCurrentScreen('waiting'); setLoading(false); return;
             }
         }
-        // If config doesn't exist, we assume OPEN (or you can fail safe to closed)
-        
-        // D. PASS -> Join
-        finalRole = 'audience';
-        userId = `USER-${cleanPhone}`;
-        userPhone = cleanPhone;
-        await joinRoom(finalRole, userId, userPhone, inputEmail);
+
+        // --- 7. ALLOWED GUEST CHECK ---
+        const guestRef = ref(db, `allowed_guests/${cleanPhone}`);
+        const snapshot = await get(guestRef);
+
+        if (snapshot.exists()) {
+            // REGISTERED USER
+            if (snapshot.val().email.toLowerCase() !== inputEmail) {
+                setError("Email does not match records."); setLoading(false); return;
+            }
+            // Join as Audience
+            await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail);
+        } else {
+            // --- 8. UNREGISTERED -> SPECTATOR POPUP ---
+            // Valid phone, valid time, not blocked, but not on list.
+            setTempCredentials({ email: inputEmail, phone: cleanPhone });
+            setLoading(false);
+            setShowSpectatorModal(true); 
+        }
 
     } catch (err) {
         console.error(err); 
         setError("System Error. Try again."); 
         setLoading(false); 
     }
+  };
+
+  const confirmSpectatorJoin = async () => {
+      setShowSpectatorModal(false);
+      setLoading(true);
+
+      const { email, phone } = tempCredentials;
+      const specId = `SPEC-${phone}`;
+
+      try {
+          // Record Spectator for Analytics
+          const unregisteredRef = ref(db, `rooms/${roomId}/unregistered/${phone}`);
+          await set(unregisteredRef, {
+              email: email,
+              phone: phone,
+              timestamp: Date.now()
+          });
+
+          // Join with role='spectator'
+          await joinRoom('spectator', specId, phone, email);
+
+      } catch (err) {
+          console.error("Spectator Join Failed", err);
+          setError("Failed to enter as spectator.");
+          setLoading(false);
+      }
   };
 
   const joinRoom = async (role, uId, phone, mail) => {
@@ -389,13 +393,12 @@ export const LoginPage = () => {
            <CoinStackLoader key="splash" onComplete={() => setCurrentScreen('login')} />
         )}
         
-        {/* SCREEN 2: WAITING ROOM (BLOCKED) */}
+        {/* SCREEN 2: WAITING ROOM */}
         {currentScreen === 'waiting' && (
             <WaitingScreen 
                 key="waiting" 
                 message={waitingMessage} 
                 nextEvent={nextEventTime}
-                // NEW: When timer ends, go back to login form automatically
                 onTimerFinished={() => {
                     setCurrentScreen('login');
                     setWaitingMessage("");
@@ -413,7 +416,6 @@ export const LoginPage = () => {
             >
                 <div className="flex-1 flex flex-col items-center justify-center w-full relative px-6 space-y-2">
                     
-                    {/* EXACT HEADER */}
                     <h1 
                         className="text-8xl font-display font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal"
                         style={{ textShadow: '8px 8px 0px #000000' }}
@@ -424,7 +426,6 @@ export const LoginPage = () => {
                     ONE PIECE ONE CHANGE
                     </p>
 
-                    {/* INPUTS */}
                     <div className="w-full max-w-xs mt-12 space-y-4">
                         <input
                             type="email"
@@ -442,7 +443,6 @@ export const LoginPage = () => {
                             className="w-full bg-white/20 border-b-2 border-white text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 transition-colors uppercase placeholder:text-white/60"
                         />
 
-                        {/* ERROR MSG */}
                         <AnimatePresence>
                             {error && (
                                 <motion.div 
@@ -457,7 +457,6 @@ export const LoginPage = () => {
                             )}
                         </AnimatePresence>
 
-                        {/* BUTTON */}
                         <button 
                             onClick={handleSmartLogin}
                             disabled={loading}
@@ -474,6 +473,49 @@ export const LoginPage = () => {
                         </button>
                     </div>
                 </div>
+
+                {/* --- SPECTATOR MODAL --- */}
+                <AnimatePresence>
+                    {showSpectatorModal && (
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-6"
+                        >
+                            <motion.div 
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                className="bg-[#FF6600] border-2 border-white p-6 w-full max-w-sm text-center shadow-2xl relative"
+                            >
+                                <AlertCircle className="w-12 h-12 text-white mx-auto mb-4" />
+                                <h3 className="font-display font-black text-2xl text-white uppercase leading-none mb-2">
+                                    UNREGISTERED<br/>USER
+                                </h3>
+                                <p className="font-mono text-xs text-white/90 leading-relaxed mb-6 border-y border-white/20 py-3">
+                                    That phone number is not on the guest list. You can enter in <strong>Spectator Mode</strong> (No Bidding), or retry.
+                                </p>
+                                
+                                <div className="flex flex-col gap-3">
+                                    <button 
+                                        onClick={confirmSpectatorJoin}
+                                        className="w-full py-3 bg-white text-[#FF6600] font-black uppercase tracking-widest text-xs hover:bg-zinc-100 transition-colors"
+                                    >
+                                        Yes, Enter as Spectator
+                                    </button>
+                                    
+                                    <button 
+                                        onClick={() => setShowSpectatorModal(false)}
+                                        className="w-full py-3 border border-white text-white font-bold uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
+                                    >
+                                        Retry Login
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
             </motion.div>
         )}
       </AnimatePresence>
