@@ -137,14 +137,14 @@ export const LoginPage = () => {
         setLoading(false); return; 
     }
     if (!inputKey) {
-        setError("Please enter Password or Phone Number");
+        setError("Please enter the registered Phone Number");
         setLoading(false); return;
     }
 
     // Credentials
-    const HOST_EMAIL = (import.meta.env.VITE_HOST_EMAIL || "").toLowerCase();
+    const HOST_EMAIL = (import.meta.env.VITE_HOST_EMAIL).toLowerCase();
     const HOST_PWD = import.meta.env.VITE_HOST_PWD;
-    const MOD_EMAIL = (import.meta.env.VITE_MODERATOR_EMAIL || "").toLowerCase();
+    const MOD_EMAIL = (import.meta.env.VITE_MODERATOR_EMAIL).toLowerCase();
     const MOD_PWD = import.meta.env.VITE_MODERATOR_PWD;
 
     let finalRole = 'audience';
@@ -181,7 +181,7 @@ export const LoginPage = () => {
                 setError("Phone number not registered."); setLoading(false); return;
             }
             if (snapshot.val().email.toLowerCase() !== inputEmail) {
-                setError("Email does not match records."); setLoading(false); return;
+                setError("Email not registered."); setLoading(false); return;
             }
 
             finalRole = 'audience';
@@ -261,7 +261,7 @@ export const LoginPage = () => {
 
                         <div className="space-y-1">
                             <label className="text-[10px] font-mono text-white/90 uppercase ml-2 tracking-wider">
-                                Phone / Password
+                                Phone Number
                             </label>
                             <div className="relative group">
                                 <Key className="absolute left-4 top-3.5 w-4 h-4 text-white" />
@@ -269,7 +269,7 @@ export const LoginPage = () => {
                                     type="text" 
                                     value={authKey} 
                                     onChange={(e) => setAuthKey(e.target.value)} 
-                                    placeholder="9876543210  OR  ••••••" 
+                                    placeholder="9876543210" 
                                     className="w-full bg-white/20 border-b-2 border-white/50 rounded-t-lg py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 focus:border-white transition-all placeholder:text-white/60"
                                 />
                             </div>
