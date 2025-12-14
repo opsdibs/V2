@@ -70,6 +70,36 @@ export const LiveRoom = ({ roomId }) => {
     };
   }, []);
 
+  // --- KILL SWITCH LISTENER ---
+  useEffect(() => {
+    // Host controls this, so they don't need to listen
+    if (isHost) return; 
+
+    const liveStatusRef = ref(db, `rooms/${roomId}/isLive`);
+    
+    const unsub = onValue(liveStatusRef, async (snapshot) => {
+      const isLive = snapshot.val();
+      
+      // If Host set isLive = false, and we are currently connected...
+      if (isLive === false && clientRef.current && joined) {
+          console.log("Stream ended by Host. Disconnecting...");
+          try {
+            // FORCE LEAVE CHANNEL
+            await clientRef.current.leave(); 
+            setJoined(false);
+            setIsStreaming(false);
+            setVideoReady(false);
+            setStatus("STREAM ENDED");
+          } catch (err) {
+            console.error("Auto-leave failed:", err);
+          }
+      }
+      // Optional: Auto-rejoin if it goes live again (logic can be added here if needed)
+    });
+
+    return () => unsub();
+  }, [roomId, isHost, joined]);
+
   useEffect(() => {
     if (isRunning.current) return;
     isRunning.current = true;
@@ -210,6 +240,7 @@ export const LiveRoom = ({ roomId }) => {
           localTracksRef.current = { audio: null, video: null };
 
           if (myClient) {
+              await myClient.unpublish().catch(() => {});
               await myClient.leave().catch(() => {});
               myClient.removeAllListeners();
           }
@@ -237,6 +268,8 @@ export const LiveRoom = ({ roomId }) => {
               await clientRef.current.unpublish(tracks);
               setIsStreaming(false);
               setStatus("READY TO AIR");
+              // NEW: KILL SWITCH TRIGGER (Signals everyone to leave)
+              await update(ref(db, `rooms/${roomId}`), { isLive: false });
           } else {
               setStatus("PUBLISHING...");
               if (localTracksRef.current.audio) {
@@ -245,6 +278,8 @@ export const LiveRoom = ({ roomId }) => {
               await clientRef.current.publish(tracks);
               setIsStreaming(true);
               setStatus("LIVE");
+              // NEW: SIGNAL LIVE STATUS
+              await update(ref(db, `rooms/${roomId}`), { isLive: true });
           }
       } catch (err) {
           console.error("Toggle Error:", err);
