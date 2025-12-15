@@ -437,11 +437,44 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
               <span className="text-[10px] text-zinc-300 font-display uppercase tracking-wider mb-1 px-1">
                   {isAuctionActive ? "Current Bid" : "Starting Price"}
               </span>
+              {/* --- CHANGE 1: RESTORED HOST PRICE CONTROLS --- */}
               <div className="flex items-center justify-end gap-1 w-full">
-                  {/* ... (Keep existing price display code) ... */}
+                  
+                  {/* A. Manual Step Buttons (Host Only, Inactive Auction) */}
+                  {isHost && !isAuctionActive && (
+                      <div className="flex flex-col gap-0.5 mr-2">
+                           <button onClick={() => manualStep(10)} className="text-white hover:text-[#FF6600] transition-colors">
+                               <ChevronUp className="w-3 h-3" />
+                           </button>
+                           <button onClick={() => manualStep(-10)} className="text-white hover:text-[#FF6600] transition-colors">
+                               <ChevronDown className="w-3 h-3" />
+                           </button>
+                      </div>
+                  )}
+
+                  {/* B. Editable Price Input */}
                   <div className="flex items-center justify-end gap-1 flex-1">
                       <span className={`text-xl font-bold ${isAuctionActive ? 'text-white' : 'text-dibs-neon'}`}>₹</span>
-                      <span className="text-4xl font-display font-black text-white tabular-nums tracking-tighter">{currentBid}</span>
+                      
+                      {isHost ? (
+                        <input 
+                            type="number"
+                            value={currentBid === 0 ? '' : currentBid}
+                            onChange={handlePriceChange}
+                            disabled={isAuctionActive}
+                            step="10"
+                            placeholder="0"
+                            style={{ width: `${Math.max(2, (currentBid?.toString() || "").length + 1)}ch` }}
+                            className={`
+                                bg-transparent text-right font-display font-black text-4xl outline-none p-0 m-0 placeholder:text-white/20 pointer-events-auto relative z-[70]
+                                ${isAuctionActive ? 'text-white' : 'text-white border-b border-dashed border-white/20'}
+                            `}
+                        />
+                      ) : (
+                        <span className="text-4xl font-display font-black text-white tabular-nums tracking-tighter">
+                            {currentBid}
+                        </span>
+                      )}
                   </div>
               </div>
           </div>
@@ -514,7 +547,33 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
 
             {/* Item Card (Unchanged content, width handled by parent) */}
             <div className="z-[60] mb-4 relative">
-                {/* ... (Keep existing Item Card and Inventory code) ... */}
+                <AnimatePresence>
+                {showInventory && isHost && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                        className="absolute bottom-full mb-2 left-0 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto z-[70]"
+                    >
+                        <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-500 bg-black/50">
+                            Select Item to Auction
+                        </div>
+                        {INVENTORY.map(item => (
+                            <button 
+                                key={item.id}
+                                onClick={() => selectItem(item)}
+                                className="p-3 text-left hover:bg-white/10 transition-colors border-b border-white/5 last:border-0 group"
+                            >
+                                <div className="flex justify-between w-full">
+                                    <span className="text-sm font-bold text-white group-hover:text-[#FF6600] transition-colors">{item.name}</span>
+                                    <span className="text-xs font-display text-dibs-neon">₹{item.startPrice}</span>
+                                </div>
+                                <span className="text-xs text-zinc-400 truncate block mt-0.5">{item.desc}</span>
+                            </button>
+                        ))}
+                    </motion.div>
+                    )}
+                </AnimatePresence>
                 {currentItem ? (
                     <div 
                         onClick={() => isHost && !isAuctionActive && setShowInventory(!showInventory)}
