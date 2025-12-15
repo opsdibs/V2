@@ -426,7 +426,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
     <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden max-w-md mx-auto border-x border-white/5 shadow-2xl">
       
       {/* TOP RIGHT: STATS (Unchanged) */}
-      <div className="absolute top-24 right-4 pointer-events-auto flex flex-col items-end gap-2">
+      <div className="absolute top-24 right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
           <div className="bg-black/40 backdrop-blur border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
               <Eye className="w-3 h-3 text-red-500 animate-pulse" />
@@ -513,7 +513,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
             </form>
 
             {/* Item Card (Unchanged content, width handled by parent) */}
-            <div className="z-40 mb-4 relative">
+            <div className="z-[60] mb-4 relative">
                 {/* ... (Keep existing Item Card and Inventory code) ... */}
                 {currentItem ? (
                     <div 
