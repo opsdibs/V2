@@ -17,21 +17,23 @@ export const LiveRoom = ({ roomId }) => {
   const [verifiedRole, setVerifiedRole] = useState(null);
   const [isVerifying, setIsVerifying] = useState(true);
 
+  // --- STATE FOR REACTIVE CONNECTION ---
+  const [isChannelLive, setIsChannelLive] = useState(false); // Tracks if Host is actually streaming
+
   useEffect(() => {
     const verifyUserSession = async () => {
         if (!dbKey) {
-            navigate('/'); // No session key = Unauthorized
+            navigate('/'); 
             return;
         }
         try {
-            // Fetch the authoritative role from Firebase
             const snapshot = await get(ref(db, `audience_data/${roomId}/${dbKey}`));
             if (snapshot.exists()) {
                 const data = snapshot.val();
-                setVerifiedRole(data.role); // 'host', 'moderator', 'spectator', or 'audience'
+                setVerifiedRole(data.role); 
             } else {
                 console.warn("Invalid Session Key");
-                navigate('/'); // Fake/Old key
+                navigate('/'); 
             }
         } catch (error) {
             console.error("Verification failed:", error);
@@ -43,10 +45,10 @@ export const LiveRoom = ({ roomId }) => {
     verifyUserSession();
   }, [roomId, dbKey, navigate]);
 
-  // Derived Permissions (Source of Truth)
+  // Derived Permissions
   const isHost = verifiedRole === 'host';
   const isModerator = verifiedRole === 'moderator';
-  const isSpectator = verifiedRole === 'spectator'; // <--- NEW: Calculate Spectator Status
+  const isSpectator = verifiedRole === 'spectator'; 
   
   // Connection States
   const [joined, setJoined] = useState(false);     
@@ -73,40 +75,22 @@ export const LiveRoom = ({ roomId }) => {
     };
   }, []);
 
-  // --- KILL SWITCH LISTENER ---
+  // --- 1. LISTENER: TRACK HOST STATUS (The "Heartbeat") ---
   useEffect(() => {
-    if (isHost) return; 
-
     const liveStatusRef = ref(db, `rooms/${roomId}/isLive`);
-    
-    const unsub = onValue(liveStatusRef, async (snapshot) => {
-      const isLive = snapshot.val();
-      
-      if (isLive === false && clientRef.current && joined) {
-          console.log("Stream ended by Host. Disconnecting...");
-          try {
-            await clientRef.current.leave(); 
-            setJoined(false);
-            setIsStreaming(false);
-            setVideoReady(false);
-            setStatus("STREAM ENDED");
-          } catch (err) {
-            console.error("Auto-leave failed:", err);
-          }
-      }
+    const unsub = onValue(liveStatusRef, (snapshot) => {
+        const liveStatus = snapshot.val();
+        setIsChannelLive(!!liveStatus); // Updates state immediately
     });
-
     return () => unsub();
-  }, [roomId, isHost, joined]);
+  }, [roomId]);
 
+  // --- 2. ANALYTICS SESSION ---
   useEffect(() => {
       if (joined && !analyticsSessionKey.current) {
-          // START SESSION
           analyticsSessionKey.current = startSession(roomId, verifiedRole || 'unknown', verifiedRole);
       }
-      
       return () => {
-          // END SESSION (User closed tab or navigated away)
           if (analyticsSessionKey.current) {
               endSession(roomId, analyticsSessionKey.current);
               analyticsSessionKey.current = null;
@@ -114,10 +98,19 @@ export const LiveRoom = ({ roomId }) => {
       };
   }, [joined, roomId, verifiedRole]);
 
+  // --- 3. MAIN CONNECTION LOGIC (Reactive to isChannelLive) ---
   useEffect(() => {
-    if (isRunning.current) return;
-    isRunning.current = true;
+    // A. GUARD CLAUSE: If Host is Offline, Audience waits here (Money Saved!)
+    if (!isHost && !isChannelLive) {
+        setStatus("WAITING FOR HOST...");
+        setJoined(false);
+        setIsStreaming(false);
+        setVideoReady(false);
+        return; // <--- This exits the effect, effectively "Killing" the connection
+    }
 
+    // B. START CONNECTION
+    // This runs if: (User is Host) OR (Channel IS Live)
     let myClient = null;
     let isActive = true;
 
@@ -176,25 +169,19 @@ export const LiveRoom = ({ roomId }) => {
         });
 
         await myClient.join(AGORA_APP_ID, roomId, token, null);
-        if (isActive) setJoined(true);
+        
+        if (isActive) {
+            setJoined(true);
+            setStatus(isHost ? "READY TO AIR" : "LIVE");
+        }
 
         if (isHost) {
           setStatus("STARTING CAMERA...");
-          
           let micTrack, camTrack;
-          
           try {
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
-                 { 
-                    encoderConfig: {
-                        width: 1280,
-                        height: 720,
-                        frameRate: 60,
-                        bitrateMin: 2000,
-                        bitrateMax: 4000
-                    }
-                 } 
+                 { encoderConfig: { width: 1280, height: 720, frameRate: 60, bitrateMin: 2000, bitrateMax: 4000 } } 
              );
              micTrack = tracks[0];
              camTrack = tracks[1];
@@ -206,9 +193,7 @@ export const LiveRoom = ({ roomId }) => {
           }
 
           if (!isActive) { 
-              micTrack?.close(); 
-              camTrack?.close(); 
-              return; 
+              micTrack?.close(); camTrack?.close(); return; 
           }
 
           localTracksRef.current = { audio: micTrack, video: camTrack };
@@ -219,8 +204,6 @@ export const LiveRoom = ({ roomId }) => {
               setVideoReady(true);
               setStatus("READY TO AIR");
           }
-        } else {
-            setStatus("WAITING FOR HOST...");
         }
 
       } catch (error) {
@@ -231,9 +214,9 @@ export const LiveRoom = ({ roomId }) => {
 
     initAgora();
 
+    // CLEANUP FUNCTION (Runs when isChannelLive becomes false)
     return () => {
       isActive = false;
-      isRunning.current = false;
       
       const cleanup = async () => {
           if (localTracksRef.current.audio) localTracksRef.current.audio.close();
@@ -252,13 +235,10 @@ export const LiveRoom = ({ roomId }) => {
       };
       cleanup();
     };
-  }, [roomId, isHost]);
+  }, [roomId, isHost, isChannelLive]); // <--- Re-runs whenever Host toggles Live status
 
   const handleToggleStream = async () => {
-      if (!clientRef.current) {
-          console.error("Client Ref is null");
-          return;
-      }
+      if (!clientRef.current) return;
 
       const tracks = [localTracksRef.current.audio, localTracksRef.current.video].filter(Boolean);
 
@@ -271,9 +251,7 @@ export const LiveRoom = ({ roomId }) => {
               await update(ref(db, `rooms/${roomId}`), { isLive: false });
           } else {
               setStatus("PUBLISHING...");
-              if (localTracksRef.current.audio) {
-                  await localTracksRef.current.audio.setEnabled(true);
-              }
+              if (localTracksRef.current.audio) await localTracksRef.current.audio.setEnabled(true);
               await clientRef.current.publish(tracks);
               setIsStreaming(true);
               setStatus("LIVE");
@@ -314,7 +292,7 @@ export const LiveRoom = ({ roomId }) => {
       }
   };
 
-  const isLoading = isHost ? !videoReady : (!joined);
+  const isLoading = isHost ? !videoReady : (!joined && isChannelLive); // Only loading if we SHOULD be connected
 
   if (isVerifying) {
       return (
@@ -342,15 +320,17 @@ export const LiveRoom = ({ roomId }) => {
             </div>
         )}
 
-        {!isHost && joined && !isStreaming && (
+        {/* STANDBY SCREEN (Shown when Host is Offline) */}
+        {!isHost && !isChannelLive && (
              <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 z-10 flex-col gap-4">
-                <span className="font-display font-black text-2xl uppercase text-zinc-700">Stream Offline</span>
-                <span className="font-mono text-xs text-zinc-500">Waiting for Host to go live...</span>
+                <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_red]"></div>
+                <span className="font-display font-black text-2xl uppercase text-zinc-500">OFF AIR</span>
+                <span className="font-mono text-xs text-zinc-600 tracking-widest">WAITING FOR SIGNAL...</span>
              </div>
         )}
       </div>
 
-      {/* LAYER 2: INTERACTION - UPDATED TO PASS SPECTATOR PROP */}
+      {/* LAYER 2: INTERACTION */}
       <InteractionLayer 
           roomId={roomId} 
           isHost={isHost} 
