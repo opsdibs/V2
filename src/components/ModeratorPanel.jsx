@@ -215,7 +215,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
                     <div 
                         key={user.dbKey} 
                         className={`
-                            flex items-center justify-between p-3 rounded-xl border transition-all mb-2
+                            flex items-center justify-between p-3 rounded-xl border transition-all mb-2 group
                             ${isOnline 
                                 ? (isSpectator ? 'bg-yellow-900/10 border-yellow-500/20' : 'bg-zinc-800/50 border-white/10') 
                                 : 'bg-black/40 border-white/5 opacity-50'
