@@ -18,22 +18,17 @@ export const LiveRoom = ({ roomId }) => {
   const [isVerifying, setIsVerifying] = useState(true);
 
   // --- STATE FOR REACTIVE CONNECTION ---
-  const [isChannelLive, setIsChannelLive] = useState(false); // Tracks if Host is actually streaming
-  const [streamId, setStreamId] = useState(0);
+  const [isChannelLive, setIsChannelLive] = useState(false); 
+  const [streamId, setStreamId] = useState(0); // Forces DOM reset on new stream
 
   useEffect(() => {
     const verifyUserSession = async () => {
-        if (!dbKey) {
-            navigate('/'); 
-            return;
-        }
+        if (!dbKey) { navigate('/'); return; }
         try {
             const snapshot = await get(ref(db, `audience_data/${roomId}/${dbKey}`));
             if (snapshot.exists()) {
-                const data = snapshot.val();
-                setVerifiedRole(data.role); 
+                setVerifiedRole(snapshot.val().role); 
             } else {
-                console.warn("Invalid Session Key");
                 navigate('/'); 
             }
         } catch (error) {
@@ -66,23 +61,21 @@ export const LiveRoom = ({ roomId }) => {
   // Refs
   const clientRef = useRef(null);
   const localTracksRef = useRef({ audio: null, video: null });
-  const isRunning = useRef(false);
   const analyticsSessionKey = useRef(null);
 
   useEffect(() => {
     document.body.style.backgroundColor = "black";
-    return () => {
-      document.body.style.backgroundColor = "";
-    };
+    return () => { document.body.style.backgroundColor = ""; };
   }, []);
 
-  // --- 1. LISTENER: TRACK HOST STATUS (The "Heartbeat") ---
+  // --- 1. LISTENER: TRACK HOST STATUS ---
   useEffect(() => {
     const liveStatusRef = ref(db, `rooms/${roomId}/isLive`);
     const unsub = onValue(liveStatusRef, (snapshot) => {
         const liveStatus = snapshot.val();
-        setIsChannelLive(!!liveStatus); // Updates state immediately
-        //If going Live, generate a new ID to force-refresh the video player
+        setIsChannelLive(!!liveStatus);
+        
+        // If going Live, increment ID to force-refresh the viewer's video player
         if (liveStatus) {
             setStreamId(prev => prev + 1);
         }
@@ -103,19 +96,17 @@ export const LiveRoom = ({ roomId }) => {
       };
   }, [joined, roomId, verifiedRole]);
 
-  // --- 3. MAIN CONNECTION LOGIC (Reactive to isChannelLive) ---
+  // --- 3. MAIN CONNECTION LOGIC ---
   useEffect(() => {
-    // A. GUARD CLAUSE: If Host is Offline, Audience waits here (Money Saved!)
+    // A. GUARD CLAUSE: If Host is Offline, Audience waits here.
     if (!isHost && !isChannelLive) {
         setStatus("WAITING FOR HOST...");
         setJoined(false);
         setIsStreaming(false);
         setVideoReady(false);
-        return; // <--- This exits the effect, effectively "Killing" the connection
+        return; 
     }
 
-    // B. START CONNECTION
-    // This runs if: (User is Host) OR (Channel IS Live)
     let myClient = null;
     let isActive = true;
 
@@ -125,23 +116,19 @@ export const LiveRoom = ({ roomId }) => {
         
         let token = null;
 
+        // Try API first
         try {
             const response = await fetch(`/api/token?channelName=${roomId || 'CHIC'}`);
             if (response.ok) {
                 const data = await response.json();
                 if (data.token) token = data.token;
-            } else {
-                console.warn(`Server API Error: ${response.status} ${response.statusText}`);
-            }
+            } 
         } catch (err) {
-            console.error("API Token Fetch Failed:", err);
+            console.warn("API Token Failed, using fallback");
         }
 
-        if (!token) {
-            console.warn("⚠️ Using Static Fallback Token");
-            token = AGORA_TOKEN; 
-        }
-
+        // Fallback
+        if (!token) token = AGORA_TOKEN; 
         if (!token) throw new Error("No Agora Token found");
 
         myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
@@ -180,18 +167,22 @@ export const LiveRoom = ({ roomId }) => {
             setStatus(isHost ? "READY TO AIR" : "LIVE");
         }
 
+        // --- HOST CAMERA SETUP ---
         if (isHost) {
           setStatus("STARTING CAMERA...");
           let micTrack, camTrack;
+          
           try {
+             // FIX: Use standard HD preset instead of aggressive 60fps
+             // This prevents "Timeout starting video source" errors
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
-                 { encoderConfig: { width: 1280, height: 720, frameRate: 60, bitrateMin: 2000, bitrateMax: 4000 } } 
+                 { encoderConfig: "720p_1" } // Standard 720p, 15fps (Safe)
              );
              micTrack = tracks[0];
              camTrack = tracks[1];
           } catch (e) {
-             console.warn("HD failed, retrying SD...");
+             console.warn("HD failed, retrying SD...", e);
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
              micTrack = tracks[0];
              camTrack = tracks[1];
@@ -219,10 +210,8 @@ export const LiveRoom = ({ roomId }) => {
 
     initAgora();
 
-    // CLEANUP FUNCTION (Runs when isChannelLive becomes false)
     return () => {
       isActive = false;
-      
       const cleanup = async () => {
           if (localTracksRef.current.audio) localTracksRef.current.audio.close();
           if (localTracksRef.current.video) localTracksRef.current.video.close();
@@ -233,18 +222,18 @@ export const LiveRoom = ({ roomId }) => {
               await myClient.leave().catch(() => {});
               myClient.removeAllListeners();
           }
-          
-          if (clientRef.current === myClient) {
-              clientRef.current = null;
-          }
+          clientRef.current = null;
       };
       cleanup();
     };
-  }, [roomId, isHost, isChannelLive]); // <--- Re-runs whenever Host toggles Live status
+
+  // --- FIX: DEPENDENCY TRICK ---
+  // If I am Host, ignore 'isChannelLive' changes (don't re-run init).
+  // If I am Audience, re-run init when 'isChannelLive' changes.
+  }, [roomId, isHost, isHost ? -1 : isChannelLive]); 
 
   const handleToggleStream = async () => {
       if (!clientRef.current) return;
-
       const tracks = [localTracksRef.current.audio, localTracksRef.current.video].filter(Boolean);
 
       try {
@@ -297,7 +286,7 @@ export const LiveRoom = ({ roomId }) => {
       }
   };
 
-  const isLoading = isHost ? !videoReady : (!joined && isChannelLive); // Only loading if we SHOULD be connected
+  const isLoading = isHost ? !videoReady : (!joined && isChannelLive);
 
   if (isVerifying) {
       return (
@@ -316,7 +305,8 @@ export const LiveRoom = ({ roomId }) => {
       {/* LAYER 1: VIDEO */}
       <div className="absolute inset-0 z-0 max-w-md mx-auto w-full bg-black">
         <div id="local-video-container" className={`w-full h-full ${!isHost ? 'hidden' : ''}`}></div>
-        {/* FIX: Add key={streamId} to force a fresh DIV on every new stream */}
+        
+        {/* FIX: key={streamId} forces a fresh DIV for viewers on stream restart */}
         <div 
             key={streamId} 
             id="remote-video-container" 
@@ -330,7 +320,6 @@ export const LiveRoom = ({ roomId }) => {
             </div>
         )}
 
-        {/* STANDBY SCREEN (Shown when Host is Offline) */}
         {!isHost && !isChannelLive && (
              <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 z-10 flex-col gap-4">
                 <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_red]"></div>
