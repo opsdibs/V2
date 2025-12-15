@@ -19,6 +19,7 @@ export const LiveRoom = ({ roomId }) => {
 
   // --- STATE FOR REACTIVE CONNECTION ---
   const [isChannelLive, setIsChannelLive] = useState(false); // Tracks if Host is actually streaming
+  const [streamId, setStreamId] = useState(0);
 
   useEffect(() => {
     const verifyUserSession = async () => {
@@ -81,6 +82,10 @@ export const LiveRoom = ({ roomId }) => {
     const unsub = onValue(liveStatusRef, (snapshot) => {
         const liveStatus = snapshot.val();
         setIsChannelLive(!!liveStatus); // Updates state immediately
+        //If going Live, generate a new ID to force-refresh the video player
+        if (liveStatus) {
+            setStreamId(prev => prev + 1);
+        }
     });
     return () => unsub();
   }, [roomId]);
@@ -311,7 +316,12 @@ export const LiveRoom = ({ roomId }) => {
       {/* LAYER 1: VIDEO */}
       <div className="absolute inset-0 z-0 max-w-md mx-auto w-full bg-black">
         <div id="local-video-container" className={`w-full h-full ${!isHost ? 'hidden' : ''}`}></div>
-        <div id="remote-video-container" className={`w-full h-full ${isHost ? 'hidden' : ''}`}></div>
+        {/* FIX: Add key={streamId} to force a fresh DIV on every new stream */}
+        <div 
+            key={streamId} 
+            id="remote-video-container" 
+            className={`w-full h-full ${isHost ? 'hidden' : ''}`}
+        ></div>
         
         {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black z-20 flex-col gap-4">
