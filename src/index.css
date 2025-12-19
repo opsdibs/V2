@@ -16,7 +16,7 @@ body {
   background-color: #1a0a00; /* Dark background for desktop "dead space" */
   color: white;
   margin: 0;
-  font-family: 'Geist', sans-serif; /* Default font */
+  font-family: 'Inter', sans-serif; /* Default font */
   overflow: hidden; /* Prevent scrolling the body, handle it inside the app */
 }
 
@@ -26,7 +26,7 @@ body {
   max-width: 430px; /* Standard large phone width */
   margin: 0 auto;   /* Center it */
   height: 100vh;
-  background-color: #FF6600; /* Main Orange Theme */
+  background-color: #000000; /* Main Orange Theme */
   position: relative;
   box-shadow: 0 0 50px rgba(0, 0, 0, 0.8); /* Nice shadow to separate from background */
   overflow: hidden;
@@ -48,22 +48,4 @@ body {
 
 .font-retro {
   font-family: 'Chunko', sans-serif !important;
-}
-
-// COMMENT SECTION ANIMATION
-@keyframes comment-fade-in {
-  0% {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* The class to apply to each comment */
-.comment-anim {
-  animation: comment-fade-in 0.25s ease-out forwards;
-  will-change: transform, opacity;
 }
