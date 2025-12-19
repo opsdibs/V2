@@ -495,7 +495,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
         style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 50%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
       >
           {/* ... (Keep existing chat message mapping code) ... */}
-          <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
+            <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
             <AnimatePresence initial={false}>
                 {messages.map((msg, i) => (
                 <motion.div
