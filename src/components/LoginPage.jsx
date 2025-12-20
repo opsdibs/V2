@@ -92,7 +92,7 @@ const CoinStackLoader = ({ onComplete }) => {
                className="absolute inset-0 flex items-center justify-center z-50"
            >
                <h1 
-                className="text-7xl font-display font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal"
+                className="text-8xl font-display font-retro leading-[1] tracking-tight text-white select-none mix-blend-normal"
                 style={{ textShadow: '8px 8px 0px #000000' }}
                >
                 DIBS!
@@ -453,7 +453,7 @@ export const LoginPage = () => {
                 <div className="flex-1 flex flex-col items-center justify-center w-full relative px-6 space-y-2">
                     
                     <h1 
-                        className="text-8xl font-display font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal"
+                        className="text-9xl font-retro font-black leading-[1] tracking-tight text-white select-none mix-blend-normal"
                         style={{ textShadow: '8px 8px 0px #000000' }}
                     >
                     DIBS!
