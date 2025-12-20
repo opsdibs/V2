@@ -434,8 +434,8 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
           </div>
 
           <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}`}>
-              <span className={`text-[10px] font-display uppercase font-bold tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-red-500' : 'text-[#FF6600]'}`}>
-                    {isAuctionActive ? "Current Bid" : "Starting Price"}
+              <span className="text-[10px] text-zinc-300 font-display uppercase tracking-wider mb-1 px-1">
+                  {isAuctionActive ? "Current Bid" : "Starting Price"}
               </span>
               {/* --- CHANGE 1: RESTORED HOST PRICE CONTROLS --- */}
               <div className="flex items-center justify-end gap-1 w-full">
@@ -454,7 +454,8 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
 
                   {/* B. Editable Price Input */}
                   <div className="flex items-center justify-end gap-1 flex-1">
-                    <span className="text-xl font-bold text-[#FF6600]">₹</span>                      
+                      <span className={`text-xl font-bold ${isAuctionActive ? 'text-white' : 'text-dibs-neon'}`}>₹</span>
+                      
                       {isHost ? (
                         <input 
                             type="number"
