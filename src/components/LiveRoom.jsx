@@ -341,8 +341,8 @@ export const LiveRoom = ({ roomId }) => {
       <div className="absolute inset-0 z-50 pointer-events-none p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex flex-col justify-between max-w-md mx-auto w-full">
         
         <div className="flex justify-between items-start pointer-events-auto">
-            <div className="flex flex-col items-start gap-2">
-                <img src="/Dibs. (1).svg" alt="Dibs" className="w-16" />
+            <div className="flex flex-col items-start gap-0.5">
+                <img src="/Dibs. (1).svg" alt="Dibs" className="w-16 -ml-2"/>
                 <div className={`px-2 py-0.5 rounded-sm flex items-center gap-2 ${isStreaming ? 'bg-red-600' : 'bg-neutral-800'}`}>
                     <span className="font-display font-black text-xs uppercase tracking-widest text-white">
                         {isStreaming ? 'LIVE' : 'OFFLINE'}
