@@ -303,7 +303,9 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
                     <span className="text-[10px] uppercase text-zinc-500 font-bold">Top Bidders</span>
                     {item.topBidders && item.topBidders.map((bidder, idx) => (
                         <div key={idx} className="flex justify-between text-xs">
-                            <span className="text-zinc-300">{idx + 1}. {bidder.user}</span>
+                            <span className="text-zinc-300">
+                              {idx + 1}. {bidder.user} {bidder.phone ? `(${bidder.phone})` : ""}
+                            </span>
                             <span className="font-mono text-zinc-500">₹{bidder.amount}</span>
                         </div>
                     ))}

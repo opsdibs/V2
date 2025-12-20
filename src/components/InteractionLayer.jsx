@@ -307,6 +307,13 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
       }
   };
 
+
+const getPhoneFromUserId = (userId) => {
+  if (!userId) return "N/A";
+  const match = userId.match(/(\d{7,})$/); // grabs trailing digits
+  return match ? match[1] : "N/A";
+};
+
   const placeBid = () => {
     if (!isAuctionActive) return; 
      triggerHaptic();
@@ -325,10 +332,12 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
     }).then((result) => {
         if (result.committed) {
             set(lastBidderRef, username);
-
+            
+            const phone = getPhoneFromUserId(persistentUserId);
             // 2. NEW: Log bid for Moderator History
             push(ref(db, `rooms/${roomId}/currentAuctionBids`), {
                 user: username,
+                phone: phone, 
                 amount: customBid,
                 timestamp: Date.now()
             });
