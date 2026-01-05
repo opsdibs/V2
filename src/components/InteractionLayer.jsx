@@ -326,12 +326,35 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
         if (result.committed) {
             set(lastBidderRef, username);
 
-            // 2. NEW: Log bid for Moderator History
+            // Log bid for Moderator History
             push(ref(db, `rooms/${roomId}/currentAuctionBids`), {
                 user: username,
                 amount: customBid,
                 timestamp: Date.now()
             });
+
+            // --- CHANGE 2: OVERTIME LOGIC ---
+            // If bid is placed in the last 10 seconds, add random 0-5 seconds
+            const now = Date.now();
+            const timeRemaining = endTime - now;
+            
+            if (timeRemaining <= 10000 && timeRemaining > 0) {
+                 // Random integer between 0 and 5
+                 const randomSeconds = Math.floor(Math.random() * 6); 
+                 
+                 if (randomSeconds > 0) {
+                     const bonusTime = randomSeconds * 1000;
+                     update(ref(db, `rooms/${roomId}/auction`), {
+                         endTime: endTime + bonusTime
+                     });
+                     
+                     // Log/Chat about the extension (Helps users understand why time jumped)
+                        push(ref(db, `rooms/${roomId}/chat`), {
+                        text: `⚡ Overtime! +${randomSeconds}s added`,
+                        type: 'auction'
+                     }); 
+                 }
+            }
         }
     });
 
@@ -352,7 +375,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
           alert("Please select an item first!");
           return;
       }
-      const newEndTime = Date.now() + (30 * 1000);
+      const newEndTime = Date.now() + (20 * 1000);
       update(ref(db, `rooms/${roomId}`), {
           "auction/isActive": true,
           "auction/endTime": newEndTime,
