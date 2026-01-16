@@ -1,2 +1,4 @@
-export const AGORA_APP_ID = "a29f2d8c43c44ed78436e72e43f6fe7e"; 
-export const AGORA_TOKEN = "007eJxTYPAVl7hjHXno8+r/O088e9BZpcrQXdRR/VtcYslbncjekPMKDIlGlmlGKRbJJsbJJiapKeYWJsZmqeZGqSbGaWZpqeap7mstMxsCGRkyt4mxMjJAIIjPxhDiEeTpFsLAAADeyiBB"; 
+
+export const AGORA_APP_ID = import.meta.env.VITE_AGORA_APP_ID;
+
+export const AGORA_TOKEN = import.meta.env.VITE_AGORA_TOKEN;
