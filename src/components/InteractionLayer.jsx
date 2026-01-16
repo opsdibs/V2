@@ -25,30 +25,7 @@ const parseInventory = () => {
 
 const INVENTORY = parseInventory();
 
-const quirky_usernames = [
-    "Thrift_Shift", "Holy_Shift_Dress", "Thrifty_Cent", "Fit_Check_Mate", "Pop_The_Tags",
-    "Deja_Shoe", "Second_Hand_Stan", "Re_Wear_It", "Shifty_Thrifty", "Oh_Crop_Top",
-    "Jean_Pool", "Clothes_Call", "Shearling_Darling", "Sole_Survivor", "Sweater_Weather_4Eva",
-    "Knot_New", "Vest_Dressed", "Good_Jeans", "Totes_Ma_Goats", "Dye_Hard_Vintage",
-    "Bidder_Sweet", "Going_Twice_Nice", "The_Snipe_Life", "Hammer_Time_Fits", "Sold_To_The_Babe",
-    "Bid_Bandit", "Gavel_Gravel", "Last_Call_Haul", "The_Highest_Bid", "Auction_Addiction",
-    "Snipe_City", "Bid_War_Winner", "One_Dollar_Holler", "The_Outbidder", "Fast_Finger_Finds",
-    "Going_Going_Gone_Girl", "Sold_Soul", "Auction_Action_Hero", "Bid_Zilla", "Final_Countdown_Fits",
-    "Bin_Diver_Diva", "Rack_Rat", "The_Hanger_Hunter", "Gold_Dust_Garms", "Needle_In_A_Haystack",
-    "Scavenger_Style", "Forage_And_Fashion", "Hidden_Gem_Hem", "The_Rummage_Room", "Digging_For_Drip",
-    "Treasure_Troll", "The_Finder_Keeper", "Rag_Trade_Raider", "Curated_Chaos", "Stash_Gordon",
-    "The_Hoard_Lord", "Pile_Driver", "Heap_Of_Chic", "Salvage_Savage", "Dust_Bunny_Finds",
-    "Retro_Grade", "Grandma_Core", "Mothball_Mafia", "Y2K_Chaos", "90s_Nightmare",
-    "Vintage_Vulture", "Old_Soul_New_Drip", "Past_Perfect_Fits", "Retro_Rocket", "Nostalgia_Nook",
-    "Time_Travel_Tees", "Blast_From_The_Past", "Analog_Apparel", "VHS_Vest", "Cassette_Closet",
-    "Disco_Nap_Duds", "Flower_Power_Hour", "Shoulder_Pad_Squad", "Acid_Wash_Ash", "Corduroy_Royalty",
-    "Wrinkled_Shirt", "Someone_Elses_Pants", "The_Dead_Stock", "Ghost_In_The_Garment", "Velvet_Vortex",
-    "Polyester_Princess", "Lint_Roller_Lover", "Preloved_Plot", "Second_Story_Style", "The_Re_Run",
-    "Epilogue_Outfits", "Sequel_Style", "Zero_New", "Slow_Mo_Fashion", "Earthy_Threads",
-    "Conscious_Closet", "Upcycle_Psycho", "Button_Masher", "Zipper_Ripper", "Fabric_Phantom"
-];
-
-export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) => {
+export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, assignedUsername}) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [currentBid, setCurrentBid] = useState(0);
@@ -126,28 +103,19 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
     return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); unsubItem(); };
   }, [roomId]);
 
-  // --- SYNC LOGIC (With Consistent Hashing) ---
+  // --- SYNC USERNAME ---
   useEffect(() => {
-      if (isHost) {
+      if (assignedUsername) {
+          setUsername(assignedUsername);
+      } else if (isHost) {
           setUsername("HOST");
       } else if (isModerator) {
-          setUsername("MODERATOR"); // <--- NEW CHECK
+          setUsername("MODERATOR");
       } else {
-          if (persistentUserId) {
-              // Deterministic Name: Generate consistent index from ID string
-              let hash = 0;
-              for (let i = 0; i < persistentUserId.length; i++) {
-                  hash = persistentUserId.charCodeAt(i) + ((hash << 5) - hash);
-              }
-              const index = Math.abs(hash) % quirky_usernames.length;
-              setUsername(quirky_usernames[index]);
-          } else {
-              // Fallback random
-              const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
-              setUsername(randomName);
-          }
+          // Fallback if DB hasn't loaded yet
+          setUsername("Guest");
       }
-  }, [isHost, isModerator, persistentUserId]); // Added isModerator to dependencies
+  }, [assignedUsername, isHost, isModerator]);
 
   // --- PRESENCE SYSTEM ---
   useEffect(() => {

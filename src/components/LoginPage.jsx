@@ -5,6 +5,7 @@ import { ArrowRight, AlertCircle, Key, Mail, Lock, X } from 'lucide-react';
 import { ref, push, set, get } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { logEvent } from '../lib/analytics';
+import { NAME_LIST } from '../lib/username_list';
 
 // --- 1. COIN STACK ANIMATION (Unchanged) ---
 const CoinStackLoader = ({ onComplete }) => {
@@ -242,6 +243,46 @@ export const LoginPage = () => {
       fetchActiveRoom();
   }, [searchParams]);
 
+  // --- UNIQUE NAMING LOGIC ---
+  const getUniqueUsername = async (roomId, userPhone) => {
+      const roomRef = ref(db, `audience_data/${roomId}`);
+      
+      // 1. Check if USER already exists (Persistence)
+      // We scan to see if this phone number is already in the room to give them back their old name
+      const snapshot = await get(roomRef);
+      let existingName = null;
+      let takenNames = new Set();
+
+      if (snapshot.exists()) {
+          const data = snapshot.val();
+          Object.values(data).forEach(user => {
+              // Match by Phone to restore session
+              if (user.phone === userPhone) {
+                  existingName = user.username;
+              }
+              // Collect all taken names
+              if (user.username) {
+                  takenNames.add(user.username);
+              }
+          });
+      }
+
+      if (existingName) return existingName;
+
+      // 2. Filter available names
+      const availableNames = NAME_LIST.filter(name => !takenNames.has(name));
+
+      // 3. Pick Random or Fallback
+      if (availableNames.length > 0) {
+          const randomIndex = Math.floor(Math.random() * availableNames.length);
+          return availableNames[randomIndex];
+      } else {
+          // Fallback: List is full, append random 3-digit number to base name
+          const baseName = NAME_LIST[Math.floor(Math.random() * NAME_LIST.length)];
+          return `${baseName}-${Math.floor(100 + Math.random() * 900)}`;
+      }
+  };
+
   const handleSmartLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -357,9 +398,12 @@ export const LoginPage = () => {
             if (snapshot.val().email.toLowerCase() !== inputEmail) {
                 setError("Email does not match records."); setLoading(false); return;
             }
+            // --- NEW: Generate Name ---
+            const uniqueName = await getUniqueUsername(roomId, cleanPhone);
+
             // Join as Audience
             logEvent(roomId, 'LOGIN_SUCCESS', { role: 'audience', phone: cleanPhone });
-            await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail);
+            await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
         } else {
             // --- 8. UNREGISTERED -> SPECTATOR POPUP ---
             // Valid phone, valid time, not blocked, but not on list.
@@ -403,14 +447,18 @@ export const LoginPage = () => {
       }
   };
 
-  const joinRoom = async (role, uId, phone, mail) => {
+  const joinRoom = async (role, uId, phone, mail, username = null) => {
     try {
+        // If no username passed (e.g. Host), default to role
+        const finalName = username || role.toUpperCase();
+
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
             email: mail, 
             phone: phone, 
             role: role, 
             userId: uId, 
+            username: finalName, // <--- SAVE TO DB
             joinedAt: Date.now(),
             restrictions: { isMuted: false, isBidBanned: false, isKicked: false }
         });

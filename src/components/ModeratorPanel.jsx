@@ -3,28 +3,6 @@ import { ref, onValue, update, remove } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { Shield, MessageSquareOff, Ban, Gavel, XCircle, History, X } from 'lucide-react';
 
-const quirky_usernames = [
-    "Thrift_Shift", "Holy_Shift_Dress", "Thrifty_Cent", "Fit_Check_Mate", "Pop_The_Tags",
-    "Deja_Shoe", "Second_Hand_Stan", "Re_Wear_It", "Shifty_Thrifty", "Oh_Crop_Top",
-    "Jean_Pool", "Clothes_Call", "Shearling_Darling", "Sole_Survivor", "Sweater_Weather_4Eva",
-    "Knot_New", "Vest_Dressed", "Good_Jeans", "Totes_Ma_Goats", "Dye_Hard_Vintage",
-    "Bidder_Sweet", "Going_Twice_Nice", "The_Snipe_Life", "Hammer_Time_Fits", "Sold_To_The_Babe",
-    "Bid_Bandit", "Gavel_Gravel", "Last_Call_Haul", "The_Highest_Bid", "Auction_Addiction",
-    "Snipe_City", "Bid_War_Winner", "One_Dollar_Holler", "The_Outbidder", "Fast_Finger_Finds",
-    "Going_Going_Gone_Girl", "Sold_Soul", "Auction_Action_Hero", "Bid_Zilla", "Final_Countdown_Fits",
-    "Bin_Diver_Diva", "Rack_Rat", "The_Hanger_Hunter", "Gold_Dust_Garms", "Needle_In_A_Haystack",
-    "Scavenger_Style", "Forage_And_Fashion", "Hidden_Gem_Hem", "The_Rummage_Room", "Digging_For_Drip",
-    "Treasure_Troll", "The_Finder_Keeper", "Rag_Trade_Raider", "Curated_Chaos", "Stash_Gordon",
-    "The_Hoard_Lord", "Pile_Driver", "Heap_Of_Chic", "Salvage_Savage", "Dust_Bunny_Finds",
-    "Retro_Grade", "Grandma_Core", "Mothball_Mafia", "Y2K_Chaos", "90s_Nightmare",
-    "Vintage_Vulture", "Old_Soul_New_Drip", "Past_Perfect_Fits", "Retro_Rocket", "Nostalgia_Nook",
-    "Time_Travel_Tees", "Blast_From_The_Past", "Analog_Apparel", "VHS_Vest", "Cassette_Closet",
-    "Disco_Nap_Duds", "Flower_Power_Hour", "Shoulder_Pad_Squad", "Acid_Wash_Ash", "Corduroy_Royalty",
-    "Wrinkled_Shirt", "Someone_Elses_Pants", "The_Dead_Stock", "Ghost_In_The_Garment", "Velvet_Vortex",
-    "Polyester_Princess", "Lint_Roller_Lover", "Preloved_Plot", "Second_Story_Style", "The_Re_Run",
-    "Epilogue_Outfits", "Sequel_Style", "Zero_New", "Slow_Mo_Fashion", "Earthy_Threads",
-    "Conscious_Closet", "Upcycle_Psycho", "Button_Masher", "Zipper_Ripper", "Fabric_Phantom"
-];
 
 export const ModeratorPanel = ({ roomId, onClose }) => {
   const [activeTab, setActiveTab] = useState('users'); // 'users' or 'history'
@@ -128,20 +106,6 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     update(ref(db), updates);
   };
 
-  const getQuirkyName = (userId) => {
-      if (!userId) return "Unknown";
-      if (userId === 'HOST' || userId === 'MODERATOR') return userId; // Special handling for Host/Mod IDs
-
-      // Deterministic generation matching InteractionLayer
-      let hash = 0;
-      for (let i = 0; i < userId.length; i++) {
-          hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      const index = Math.abs(hash) % quirky_usernames.length;
-      return quirky_usernames[index];
-  };
-
-  // --- INSERT BEFORE RETURN STATEMENT ---
   
   // Calculate Stats on the fly based on the processed 'users' list
   const stats = users.reduce((acc, user) => {
@@ -203,7 +167,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
             .filter(user => {
                 if (!searchTerm) return true;
                 const term = searchTerm.toLowerCase();
-                const name = getQuirkyName(user.userId).toLowerCase();
+                const name = (user.username || user.userId).toLowerCase();
                 const id = user.userId.toLowerCase();
                 return name.includes(term) || id.includes(term);
             }).map(user => {
@@ -236,7 +200,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
                             <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
                                     <span className={`font-mono text-sm font-bold ${isOnline ? 'text-white' : 'text-zinc-500'}`}>
-                                        {getQuirkyName(user.userId)}
+                                        {user.username || user.userId} 
                                     </span>
                                     
                                     {/* ROLE BADGE */}

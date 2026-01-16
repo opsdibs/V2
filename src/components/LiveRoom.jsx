@@ -16,6 +16,7 @@ export const LiveRoom = ({ roomId }) => {
   const dbKey = searchParams.get('dbKey');
   const [verifiedRole, setVerifiedRole] = useState(null);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [currentUsername, setCurrentUsername] = useState(null); // <--- NEW
 
   // --- STATE FOR REACTIVE CONNECTION ---
   const [isChannelLive, setIsChannelLive] = useState(false); 
@@ -27,7 +28,9 @@ export const LiveRoom = ({ roomId }) => {
         try {
             const snapshot = await get(ref(db, `audience_data/${roomId}/${dbKey}`));
             if (snapshot.exists()) {
-                setVerifiedRole(snapshot.val().role); 
+                const data = snapshot.val();
+                setVerifiedRole(data.role);
+                setCurrentUsername(data.username); // <--- NEW: Capture username
             } else {
                 navigate('/'); 
             }
@@ -348,6 +351,7 @@ const switchCamera = async () => {
           isHost={isHost} 
           isModerator={isModerator}
           isSpectator={isSpectator} 
+          assignedUsername={currentUsername} // <--- NEW PROP
       />
 
       {/* LAYER 3: SYSTEM CONTROLS */}
