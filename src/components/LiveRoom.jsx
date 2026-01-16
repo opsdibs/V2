@@ -56,6 +56,7 @@ export const LiveRoom = ({ roomId }) => {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
   const [cameras, setCameras] = useState([]);
+  const [cameraFacingMode, setCameraFacingMode] = useState("environment"); // rear="environment" | front="user"
   const [showModPanel, setShowModPanel] = useState(false);
 
   // Refs
@@ -177,13 +178,17 @@ export const LiveRoom = ({ roomId }) => {
              // This prevents "Timeout starting video source" errors
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
-                 { encoderConfig: "720p_1" } // Standard 720p, 15fps (Safe)
+                 { encoderConfig: "720p_1", facingMode: cameraFacingMode } // rear/front only
+
              );
              micTrack = tracks[0];
              camTrack = tracks[1];
           } catch (e) {
              console.warn("HD failed, retrying SD...", e);
-             const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+             const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+                undefined,
+                { facingMode: cameraFacingMode }
+             );
              micTrack = tracks[0];
              camTrack = tracks[1];
           }
@@ -196,7 +201,7 @@ export const LiveRoom = ({ roomId }) => {
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
-              camTrack.play(localContainer);
+              camTrack.play(localContainer, { mirror: false });
               setVideoReady(true);
               setStatus("READY TO AIR");
           }
@@ -257,19 +262,27 @@ export const LiveRoom = ({ roomId }) => {
       }
   };
 
-  const switchCamera = async () => {
-      if (!localTracksRef.current.video || cameras.length <= 1) return;
-      try {
-          const currentTrack = localTracksRef.current.video;
-          const currentLabel = currentTrack.getTrackLabel();
-          const currentIndex = cameras.findIndex(c => c.label === currentLabel);
-          const nextIndex = (currentIndex + 1) % cameras.length;
-          const nextDevice = cameras[nextIndex];
-          await currentTrack.setDevice(nextDevice.deviceId);
-      } catch (err) {
-          console.error("Camera switch failed", err);
-      }
-  };
+const switchCamera = async () => {
+  if (!localTracksRef.current.video) return;
+
+  try {
+    const currentTrack = localTracksRef.current.video;
+    const nextFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+
+    // Enforce exactly two states: rear (environment) <-> front (user), both at 1x
+    await currentTrack.setDevice({ facingMode: nextFacingMode });
+    setCameraFacingMode(nextFacingMode);
+
+    // Ensure preview stays non-mirrored after switching
+    const localContainer = document.getElementById("local-video-container");
+    if (localContainer) {
+      localContainer.innerHTML = "";
+      currentTrack.play(localContainer, { mirror: false });
+    }
+  } catch (err) {
+    console.error("Camera switch failed", err);
+  }
+};
 
   const toggleMic = async () => {
       if (localTracksRef.current.audio) {
