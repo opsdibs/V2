@@ -117,25 +117,42 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
       }
   }, [assignedUsername, isHost, isModerator]);
 
-  // --- PRESENCE SYSTEM ---
+  // --- PRESENCE SYSTEM (UPDATED: VISIBILITY TRACKING) ---
   useEffect(() => {
       if (!isHost && persistentUserId) {
-          // Reference to this specific user in the viewers list
-          // CRITICAL: Use the EXACT persistentUserId from the URL
           const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${persistentUserId}`);
           
-          // 2. Set Status to Online
-          set(myPresenceRef, true);
+          // Helper: Updates status in DB
+          // We now store an OBJECT instead of just 'true'
+          const updateStatus = (status) => {
+              set(myPresenceRef, {
+                  state: status,       // 'online' or 'idle'
+                  lastChanged: Date.now()
+              });
+          };
+
+          // 1. Initial Set: Online
+          updateStatus('online');
           
-          // 3. Setup auto-remove on disconnect
+          // 2. Listener: Detect Tab Switching (True Attention)
+          const handleVisibility = () => {
+              if (document.hidden) {
+                  updateStatus('idle'); // User minimized tab / switched apps
+              } else {
+                  updateStatus('online'); // User is actively watching
+              }
+          };
+
+          document.addEventListener("visibilitychange", handleVisibility);
+          
+          // 3. Auto-remove on disconnect (Network Loss/Close)
           onDisconnect(myPresenceRef).remove();
           
-          // 4. Cleanup on component unmount
-          return () => { remove(myPresenceRef); };
-      }
-      // Debugging: Warn if a viewer has no ID
-      else if (!isHost && !persistentUserId) {
-          console.error("PRESENCE ERROR: No persistentUserId found for viewer!");
+          // 4. Cleanup
+          return () => { 
+              document.removeEventListener("visibilitychange", handleVisibility);
+              remove(myPresenceRef); 
+          };
       }
   }, [roomId, isHost, persistentUserId]);
 

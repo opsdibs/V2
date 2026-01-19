@@ -10,6 +10,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [history, setHistory] = useState([]);
   const [onlineIds, setOnlineIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [onlineData, setOnlineData] = useState({});
   const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
   // 1. Fetch & Process Audience List
@@ -44,10 +45,14 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
           }, [])
 
           // 3. Mark Online Status & Check Time Window
-          .map(user => ({
-            ...user,
-            isOnline: onlineIds.includes(user.userId)
-          }))
+          .map(user => {
+            const presence = onlineData[user.userId];
+            return {
+                ...user,
+                isOnline: !!presence, // True if key exists
+                presenceState: presence ? presence.state : 'offline' // 'online' | 'idle' | 'offline'
+            };
+          })
           .filter(user => {
             // Keep if Online OR (Offline but joined within last 2 hours)
             return user.isOnline || (now - user.joinedAt < TWO_HOURS_MS);
@@ -82,12 +87,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     const presenceRef = ref(db, `rooms/${roomId}/viewers`);
     return onValue(presenceRef, (snapshot) => {
       const data = snapshot.val();
-      if (data) {
-        // The keys are the userIds
-        setOnlineIds(Object.keys(data));
-      } else {
-        setOnlineIds([]);
-      }
+      setOnlineData(data || {}); // Store the whole object, not just keys
     });
   }, [roomId]);
 
@@ -189,13 +189,15 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
                         {/* LEFT: INFO */}
                         <div className="flex items-center gap-3">
                             {/* Status Dot */}
-                            <div className={`
-                                w-2.5 h-2.5 rounded-full shadow-sm 
-                                ${isOnline 
-                                    ? (isSpectator ? 'bg-yellow-500 animate-pulse' : 'bg-green-500 animate-pulse') 
-                                    : 'bg-red-900/50'
-                                }
-                            `} />
+                        <div className={`
+                            w-2.5 h-2.5 rounded-full shadow-sm transition-colors
+                            ${user.isOnline 
+                                ? (user.presenceState === 'idle' 
+                                    ? 'bg-orange-500' // Idle
+                                    : 'bg-green-500 animate-pulse') // Active 
+                                : 'bg-red-900/50' // Offline
+                            }
+                        `} title={user.presenceState === 'idle' ? "Background/Idle" : "Active"} />
                             
                             <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
