@@ -67,7 +67,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
         setUsers(processed);
       }
     });
-  }, [roomId, onlineIds]); // Added onlineIds as dependency to re-sort when presence changes
+  }, [roomId, onlineData]); // Added onlineIds as dependency to re-sort when presence changes
 
   // 2. Fetch Auction History
   useEffect(() => {
