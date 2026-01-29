@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ref, onValue, update, remove } from 'firebase/database';
 import { db } from '../lib/firebase';
-import { Shield, MessageSquareOff, Ban, Gavel, XCircle, History, X } from 'lucide-react';
+import { Shield, MessageSquareOff, Ban, Gavel, XCircle, History, X, UserX, UserCheck } from 'lucide-react'; // CHANGE HERE
 
 
 export const ModeratorPanel = ({ roomId, onClose }) => {
@@ -11,7 +11,9 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [onlineIds, setOnlineIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [onlineData, setOnlineData] = useState({});
+  const [hostUser, setHostUser] = useState(null); // NEW: latest host session row
   const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
 
   // 1. Fetch & Process Audience List
   useEffect(() => {
@@ -24,6 +26,13 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
           dbKey: key,
           ...val
         }));
+        
+        const latestHost =
+        rawList
+        .filter(u => u.role === 'host')
+        .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))[0] || null;
+        setHostUser(latestHost);
+        
 
         // Processing Pipeline:
         const processed = rawList
@@ -91,7 +100,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     });
   }, [roomId]);
 
-  // --- ACTIONS ---
+    // --- ACTIONS ---
   const toggleRestriction = (user, type) => {
     // type = 'isMuted' or 'isBidBanned'
     const updates = {};
@@ -105,6 +114,38 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     updates[`audience_data/${roomId}/${user.dbKey}/restrictions/isKicked`] = true;
     update(ref(db), updates);
   };
+
+  // CHANGE HERE: moderator mutes/unmutes host chat
+  const setHostChatMuted = async (enabled) => {
+    await update(ref(db), {
+      [`rooms/${roomId}/hostModeration/chatMuted`]: enabled,
+      ...(hostUser?.dbKey
+        ? { [`audience_data/${roomId}/${hostUser.dbKey}/restrictions/isMuted`]: enabled }
+        : {}),
+    });
+  };
+
+  // CHANGE HERE: moderator kicks host (end stream + force host to go home via LiveRoom listener)
+  const kickHostNow = async () => {
+    const now = Date.now();
+    await update(ref(db), {
+      [`rooms/${roomId}/hostModeration/kickNow`]: now,
+      [`rooms/${roomId}/isLive`]: false,
+      ...(hostUser?.dbKey
+        ? { [`audience_data/${roomId}/${hostUser.dbKey}/restrictions/isKicked`]: true }
+        : {}),
+    });
+  };
+
+  // CHANGE HERE: moderator bans/unbans host login (ban also kicks host immediately)
+  const setHostBanned = async (enabled) => {
+    await update(ref(db), {
+    [`rooms/${roomId}/hostModeration/isBanned`]: enabled,
+    ...(enabled ? {} : { [`rooms/${roomId}/hostModeration/kickNow`]: null }), // CHANGE HERE
+  });
+
+  if (enabled) await kickHostNow();
+};
 
   
   // Calculate Stats on the fly based on the processed 'users' list
@@ -161,6 +202,64 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {activeTab === 'users' && (
+  <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col">
+        <div className="text-xs font-bold text-white">Host Controls</div>
+        <div className="text-[10px] text-zinc-500 font-mono">
+          {hostUser ? (hostUser.username || hostUser.userId) : "No host detected"}
+        </div>
+      </div>
+
+      {/* CHANGE HERE: icon actions, same style as user row */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setHostChatMuted(true)}
+          disabled={!hostUser}
+          className={`p-2 rounded-lg border ${!hostUser ? 'opacity-40 cursor-not-allowed border-white/10 text-zinc-600' : 'border-white/10 text-zinc-400 hover:bg-white/10'}`}
+          title="Mute Host Chat"
+        >
+          <MessageSquareOff className="w-3 h-3" />
+        </button>
+
+        <button
+          onClick={() => setHostChatMuted(false)}
+          disabled={!hostUser}
+          className={`p-2 rounded-lg border ${!hostUser ? 'opacity-40 cursor-not-allowed border-white/10 text-zinc-600' : 'border-white/10 text-zinc-400 hover:bg-white/10'}`}
+          title="Unmute Host Chat"
+        >
+          <XCircle className="w-3 h-3" />
+        </button>
+
+        <button
+          onClick={() => kickHostNow()}
+          disabled={!hostUser}
+          className={`p-2 rounded-lg border ${!hostUser ? 'opacity-40 cursor-not-allowed border-red-900/30 text-red-900' : 'border-red-900/30 text-red-500 hover:bg-red-900/20'}`}
+          title="Kick Host (End Stream)"
+        >
+          <Ban className="w-3 h-3" />
+        </button>
+
+        <button
+          onClick={() => setHostBanned(true)}
+          className="p-2 rounded-lg border border-red-900/30 text-red-500 hover:bg-red-900/20"
+          title="Ban Host Login"
+        >
+          <UserX className="w-3 h-3" />
+        </button>
+
+        <button
+          onClick={() => setHostBanned(false)}
+          className="p-2 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/10"
+          title="Unban Host Login"
+        >
+          <UserCheck className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
+  </div>
+)}
         
         {/* VIEWERS TAB */}
         {activeTab === 'users' && users

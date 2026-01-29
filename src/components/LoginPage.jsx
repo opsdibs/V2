@@ -310,9 +310,18 @@ export const LoginPage = () => {
     const MOD_PWD = import.meta.env.VITE_MODERATOR_PWD;
 
     // --- 2. HOST/MOD CHECK (Bypass Everything) ---
-    if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
-         await joinRoom('host', 'HOST', 'N/A', inputEmail); return;
-    }
+if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
+     // CHANGE HERE: prevent host login if moderator banned host
+     const banSnap = await get(ref(db, `rooms/${roomId}/hostModeration/isBanned`));
+     if (banSnap.exists() && banSnap.val() === true) {
+        setError("Host access has been disabled by the moderator.");
+        setLoading(false);
+        return;
+     }
+
+     await joinRoom('host', 'HOST', 'N/A', inputEmail); return;
+}
+
     if (inputEmail === MOD_EMAIL && inputKey === MOD_PWD) {
          await joinRoom('moderator', 'MODERATOR', 'N/A', inputEmail); return;
     }

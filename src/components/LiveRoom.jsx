@@ -66,6 +66,8 @@ export const LiveRoom = ({ roomId }) => {
   const clientRef = useRef(null);
   const localTracksRef = useRef({ audio: null, video: null });
   const analyticsSessionKey = useRef(null);
+  const lastKickNowRef = useRef(null); // CHANGE HERE: ignore old kickNow
+
 
   useEffect(() => {
     document.body.style.backgroundColor = "black";
@@ -86,6 +88,42 @@ export const LiveRoom = ({ roomId }) => {
     });
     return () => unsub();
   }, [roomId]);
+  // CHANGE HERE: host kick listener (leave stream + go home)
+useEffect(() => {
+  if (!isHost) return;
+
+  const kickRef = ref(db, `rooms/${roomId}/hostModeration/kickNow`);
+  return onValue(kickRef, async (snap) => {
+    const kickedAt = snap.val();
+
+    // CHANGE HERE: ignore the initial onValue() fire and ignore repeats
+    if (lastKickNowRef.current === null) {
+    lastKickNowRef.current = kickedAt;
+    return;
+    }
+    if (!kickedAt || kickedAt === lastKickNowRef.current) return;
+    lastKickNowRef.current = kickedAt;
+
+    try {
+      const client = clientRef.current;
+      const tracks = [localTracksRef.current.audio, localTracksRef.current.video].filter(Boolean);
+
+      // CHANGE HERE: stop publish + leave agora
+      if (client) {
+        try { await client.unpublish(tracks); } catch {}
+        try { await client.leave(); } catch {}
+      }
+
+      // CHANGE HERE: make room not live
+      try { await update(ref(db, `rooms/${roomId}`), { isLive: false }); } catch {}
+
+      // CHANGE HERE: send host to home
+      navigate('/');
+    } catch {
+      navigate('/'); // CHANGE HERE: fallback
+    }
+  });
+}, [isHost, roomId, navigate]);
 
   // --- 2. ANALYTICS SESSION ---
   useEffect(() => {
