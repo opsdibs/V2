@@ -11,7 +11,10 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [onlineIds, setOnlineIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [onlineData, setOnlineData] = useState({});
-  const [hostUser, setHostUser] = useState(null); // NEW: latest host session row
+  const [hostUser, setHostUser] = useState(null); // NEW: latest host session 
+  const [hostChatMuted, setHostChatMutedState] = useState(false); // CHANGE HERE: drive active UI state
+  const [hostBanned, setHostBannedState] = useState(false);       // CHANGE HERE: drive active UI state
+
   const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 
@@ -99,6 +102,20 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
       setOnlineData(data || {}); // Store the whole object, not just keys
     });
   }, [roomId]);
+
+  // CHANGE HERE: listen to host moderation flags so buttons can show active/inactive
+useEffect(() => {
+  const muteRef = ref(db, `rooms/${roomId}/hostModeration/chatMuted`);
+  const banRef = ref(db, `rooms/${roomId}/hostModeration/isBanned`);
+
+  const unsubMute = onValue(muteRef, (snap) => setHostChatMutedState(!!snap.val()));
+  const unsubBan = onValue(banRef, (snap) => setHostBannedState(!!snap.val()));
+
+  return () => {
+    unsubMute();
+    unsubBan();
+  };
+}, [roomId]);
 
     // --- ACTIONS ---
   const toggleRestriction = (user, type) => {
@@ -214,23 +231,20 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
 
       {/* CHANGE HERE: icon actions, same style as user row */}
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => setHostChatMuted(true)}
-          disabled={!hostUser}
-          className={`p-2 rounded-lg border ${!hostUser ? 'opacity-40 cursor-not-allowed border-white/10 text-zinc-600' : 'border-white/10 text-zinc-400 hover:bg-white/10'}`}
-          title="Mute Host Chat"
+      <button
+        onClick={() => setHostChatMuted(!hostChatMuted)}
+        disabled={!hostUser}
+        className={`p-2 rounded-lg border ${
+          !hostUser
+            ? 'opacity-40 cursor-not-allowed border-white/10 text-zinc-600'
+            : hostChatMuted
+              ? 'bg-red-500 border-red-500 text-white'
+              : 'border-white/10 text-zinc-400 hover:bg-white/10'
+        }`}
+        title={hostChatMuted ? "Unmute Host Chat" : "Mute Host Chat"}
         >
-          <MessageSquareOff className="w-3 h-3" />
-        </button>
-
-        <button
-          onClick={() => setHostChatMuted(false)}
-          disabled={!hostUser}
-          className={`p-2 rounded-lg border ${!hostUser ? 'opacity-40 cursor-not-allowed border-white/10 text-zinc-600' : 'border-white/10 text-zinc-400 hover:bg-white/10'}`}
-          title="Unmute Host Chat"
-        >
-          <XCircle className="w-3 h-3" />
-        </button>
+        <MessageSquareOff className="w-3 h-3" />
+      </button>
 
         <button
           onClick={() => kickHostNow()}
@@ -241,20 +255,16 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
           <Ban className="w-3 h-3" />
         </button>
 
-        <button
-          onClick={() => setHostBanned(true)}
-          className="p-2 rounded-lg border border-red-900/30 text-red-500 hover:bg-red-900/20"
-          title="Ban Host Login"
+         <button
+          onClick={() => setHostBanned(!hostBanned)}
+          className={`p-2 rounded-lg border ${
+            hostBanned
+              ? 'bg-red-500 border-red-500 text-white'
+              : 'border-red-900/30 text-red-500 hover:bg-red-900/20'
+          }`}
+          title={hostBanned ? "Unban Host Login" : "Ban Host Login"}
         >
           <UserX className="w-3 h-3" />
-        </button>
-
-        <button
-          onClick={() => setHostBanned(false)}
-          className="p-2 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/10"
-          title="Unban Host Login"
-        >
-          <UserCheck className="w-3 h-3" />
         </button>
       </div>
     </div>
