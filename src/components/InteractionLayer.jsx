@@ -729,8 +729,8 @@ const getPhoneFromUserId = (userId) => {
                         ? 'bg-[#ff6500] border border-white/20 text-white font-bold'
                         : msg.type === 'auction'
                         ? 'bg-[#161616] border border-[#ff6500] text-white font-bold'
-                        : 'bg-[#161616] text-white border border-white/10 font-normal' 
-                    }`}
+                       : 'bg-[#161616] text-white border border-white/10 font-normal relative pr-10' // CHANGE
+                       }`}
                 >
                     {msg.type !== 'bid' && msg.type !== 'auction' && (
                       <div className="flex items-center justify-between gap-2">
@@ -741,7 +741,7 @@ const getPhoneFromUserId = (userId) => {
                           <button
                             type="button"
                             onClick={() => pinMessage(msg)}
-                            className="h-5 w-5 rounded-full border transition-colors flex items-center justify-center border-white/15 text-white/70 bg-white/5 hover:text-white"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full border transition-colors flex items-center justify-center border-white/15 text-white/70 bg-white/5 hover:text-white"
                             title="Pin message"
                           >
                             <Pin className="w-3 h-3" />
