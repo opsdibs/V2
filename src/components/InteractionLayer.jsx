@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus, Trash2 } from 'lucide-react'; // CHANGE
-import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database'; 
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X } from 'lucide-react'; // CHANGE
+import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database';
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
 import inventoryRaw from '../inventory.csv?raw';
@@ -27,6 +27,7 @@ const INVENTORY = parseInventory();
 
 export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, assignedUsername}) => {
   const [messages, setMessages] = useState([]);
+  const [pinnedMessage, setPinnedMessage] = useState(null);
   const [input, setInput] = useState("");
   const [currentBid, setCurrentBid] = useState(0);
   const [customBid, setCustomBid] = useState(10);
@@ -72,6 +73,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
 
     useEffect(() => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
+    const pinnedRef = ref(db, `rooms/${roomId}/pinnedChat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const auctionRef = ref(db, `rooms/${roomId}/auction`);
     const viewersRef = ref(db, `rooms/${roomId}/viewers`);
@@ -84,6 +86,11 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
       const data = snapshot.val();
       if (data) setMessages(Object.values(data).slice(-50));
     });
+
+    const unsubPinned = onValue(pinnedRef, (snapshot) => {
+  const data = snapshot.val();
+  setPinnedMessage(data || null);
+});
 
     const unsubAuction = onValue(auctionRef, (snapshot) => {
       const data = snapshot.val();
@@ -173,12 +180,14 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
 
     return () => {
       unsubChat();
+      unsubPinned();
       unsubBid();
       unsubAuction();
       unsubViewers();
       unsubItem();
       unsubCustomItems();
     };
+
   }, [roomId]);
 
   // --- SYNC USERNAME ---
@@ -300,6 +309,34 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   }, [roomId, persistentDbKey]);
 
   // --- ACTIONS ---
+  const canPinMessage = (msg) => {
+  if (!(isHost || isModerator)) return false;
+  if (!msg || msg.type !== 'msg') return false;
+  if (msg.isHost || msg.isModerator) return true;
+  if (msg.role === "host" || msg.role === "moderator") return true;
+  if (msg.user === "HOST" || msg.user === "MODERATOR") return true;
+  if (msg.user && msg.user === username) return true;
+  return false;
+};
+
+const pinMessage = (msg) => {
+  if (!canPinMessage(msg)) return;
+  const payload = {
+    user: msg.user || "Unknown",
+    text: msg.text || "",
+    type: msg.type || "msg",
+    sourceCreatedAt: Number(msg.createdAt) || null,
+    pinnedAt: Date.now(),
+    pinnedBy: isHost ? "host" : "moderator",
+  };
+  set(ref(db, `rooms/${roomId}/pinnedChat`), payload);
+};
+
+const unpinMessage = () => {
+  if (!(isHost || isModerator)) return;
+  remove(ref(db, `rooms/${roomId}/pinnedChat`));
+};
+
   const sendMessage = (e) => {
     e.preventDefault();
     // 1. Check restriction
@@ -312,6 +349,9 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
       user: username,
       text: input,
       isHost,
+      isModerator,
+      role: isHost ? "host" : isModerator ? "moderator" : "viewer",
+      createdAt: Date.now(),
       type: 'msg'
     });
     logEvent(roomId, 'CHAT_SENT', { user: username, type: 'msg' });
@@ -666,13 +706,16 @@ const getPhoneFromUserId = (userId) => {
       </div>
     
     <div className="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end z-30 pointer-events-none h-[85%]">
+
+      
  
-      {/* 1. CHAT STREAM (Dynamic Width) */}
-      <div 
-        ref={chatContainerRef} 
-        className={`${leftColumnClass} h-40 overflow-y-auto pointer-events-auto pr-2 mb-2 transition-all duration-300`}
-        style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 50%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
-      >
+{/* 2. CHAT STREAM (Dynamic Width) */}
+<div 
+  ref={chatContainerRef} 
+  className={`${leftColumnClass} h-40 overflow-y-auto pointer-events-auto pr-2 mb-2 transition-all duration-300`}
+  style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 50%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
+>
+
           {/* ... (Keep existing chat message mapping code) ... */}
             <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
             <AnimatePresence initial={false}>
@@ -690,15 +733,53 @@ const getPhoneFromUserId = (userId) => {
                     }`}
                 >
                     {msg.type !== 'bid' && msg.type !== 'auction' && (
+                      <div className="flex items-center justify-between gap-2">
                         <span className="font-bold text-[8px] mr-2 block text-[#FF6600]">
-                            {msg.user}
+                          {msg.user}
                         </span>
+                        {canPinMessage(msg) && (
+                          <button
+                            type="button"
+                            onClick={() => pinMessage(msg)}
+                            className="h-5 w-5 rounded-full border transition-colors flex items-center justify-center border-white/15 text-white/70 bg-white/5 hover:text-white"
+                            title="Pin message"
+                          >
+                            <Pin className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     )}
                     <span className={`text-[10px] leading-tight block ${msg.type === 'msg' ? 'font-normal' : 'font-bold'}`}>
                         {msg.text}
                     </span>
                 </motion.div>
                 ))}
+                {pinnedMessage && (
+              <motion.div
+                key="pinned-message"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+               className="self-start w-full rounded-[24px] px-4 py-2 pr-10 shadow-sm break-words font-display bg-[#161616] border border-[#FF6600] text-white relative" // CHANGE
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[8px] mr-2 block text-[#FF6600]">
+                    PINNED • {pinnedMessage.user}
+                  </span>
+                  {(isHost || isModerator) && (
+                    <button
+                      type="button"
+                      onClick={unpinMessage}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full border transition-colors flex items-center justify-center border-white/15 text-white/70 bg-white/5 hover:text-white" // CHANGE
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <span className="text-[10px] leading-tight block font-normal">
+                  {pinnedMessage.text}
+                </span>
+              </motion.div>
+            )}
             </AnimatePresence>
             <div ref={chatEndRef} />
           </div>
