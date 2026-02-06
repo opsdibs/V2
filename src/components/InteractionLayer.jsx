@@ -709,7 +709,7 @@ const getPhoneFromUserId = (userId) => {
 
       
  
-{/* 2. CHAT STREAM (Dynamic Width) */}
+{/* 2. CHAT STREAM (Dynamic Width)  */}
 <div 
   ref={chatContainerRef} 
   className={`${leftColumnClass} h-40 overflow-y-auto pointer-events-auto pr-2 mb-2 transition-all duration-300`}
