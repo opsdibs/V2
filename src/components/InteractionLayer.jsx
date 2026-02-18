@@ -76,7 +76,7 @@ const currentAuctionItemRef = useRef(null); // change here
     const pinnedRef = ref(db, `rooms/${roomId}/pinnedChat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const auctionRef = ref(db, `rooms/${roomId}/auction`);
-    const viewerCountRef = ref(db, `rooms/${roomId}/viewerCount`); //EFF CHANGE
+    const viewersRef = ref(db, `rooms/${roomId}/viewers`);
     const itemRef = ref(db, `rooms/${roomId}/currentItem`);
 
     // CHANGE: custom items live in DB per-room
@@ -118,8 +118,8 @@ const currentAuctionItemRef = useRef(null); // change here
       });
     });
 
-    const unsubViewers = onValue(viewerCountRef, (snapshot) => { //EFF CHANGE
-      setViewerCount(snapshot.val() || 0);
+    const unsubViewers = onValue(viewersRef, (snapshot) => {
+      setViewerCount(snapshot.size);
     });
 
     const unsubItem = onValue(itemRef, (snapshot) => {
