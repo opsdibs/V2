@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './components/LoginPage';
 import { LiveRoom } from './components/LiveRoom';
+import { StreamDashboard } from './components/StreamDashboard';
 
 function App() {
   return (
@@ -12,6 +13,9 @@ function App() {
         
         {/* Legacy/Direct link support */}
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Stream Dashboard */}
+        <Route path="/dashboard" element={<StreamDashboard />} />
         
         {/* The Live Room (Protected by Login Logic) */}
         <Route path="/room/:roomId" element={<RoomWrapper />} />
