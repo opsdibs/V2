@@ -51,16 +51,16 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemDesc, setNewItemDesc] = useState("");
+const chatEndRef = useRef(null);
+const chatContainerRef = useRef(null);
+const isAuctionActiveRef = useRef(false);
+const currentBidRef = useRef(0);
 
-  const chatEndRef = useRef(null);
-  const chatContainerRef = useRef(null);
-  const isAuctionActiveRef = useRef(false);
-  const currentBidRef = useRef(0);
+// CHANGE: ref holds the same snapshot as selectedItem (not just an id)
+const currentItemRef = useRef(null);
 
-  // CHANGE: ref holds the same snapshot as selectedItem (not just an id)
-  const currentItemRef = useRef(null);
-
-  //new
+const currentAuctionIdRef = useRef(null); // change here
+const currentAuctionItemRef = useRef(null); // change here
 
   const stopTriggeredRef = useRef(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
@@ -93,14 +93,20 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
 });
 
     const unsubAuction = onValue(auctionRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setIsAuctionActive(data.isActive);
-        isAuctionActiveRef.current = data.isActive;
-        setEndTime(data.endTime || 0);
-        if (data.isActive) stopTriggeredRef.current = false;
-      }
-    });
+    const data = snapshot.val();
+    if (data) {
+      setIsAuctionActive(data.isActive);
+      isAuctionActiveRef.current = data.isActive;
+      setEndTime(data.endTime || 0);
+      if (data.isActive) stopTriggeredRef.current = false;
+
+      currentAuctionIdRef.current = data.id || null;
+      currentAuctionItemRef.current = data.itemSnapshot || null;
+    } else {
+    currentAuctionIdRef.current = null; // change here
+    currentAuctionItemRef.current = null; // change here
+  }
+});
 
     const unsubBid = onValue(bidRef, (snapshot) => {
       const price = snapshot.val() || 0;
@@ -516,13 +522,15 @@ const getPhoneFromUserId = (userId) => {
             
             const phone = getPhoneFromUserId(persistentUserId);
             // 2. NEW: Log bid for Moderator History
-            push(ref(db, `rooms/${roomId}/currentAuctionBids`), {
-                user: username,
-                phone: phone, 
-                amount: customBid,
-                timestamp: Date.now()
-            });
+           const auctionId = currentAuctionIdRef.current;
+            if (!auctionId) return;
 
+            push(ref(db, `rooms/${roomId}/auctionBids/${auctionId}`), {
+              user: username,
+              phone,
+              amount: customBid,
+              timestamp: Date.now()
+            });
             // --- CHANGE 2: OVERTIME LOGIC ---
             // If bid is placed in the last 10 seconds, add random 0-5 seconds
             const now = Date.now();
@@ -568,30 +576,37 @@ const getPhoneFromUserId = (userId) => {
       return;
     }
 
-    const newEndTime = Date.now() + (20 * 1000);
+   const newEndTime = Date.now() + (20 * 1000);
+    const item = currentItemRef.current;
+    const auctionId = push(ref(db, `rooms/${roomId}/auctionSessions`)).key;
+
     update(ref(db, `rooms/${roomId}`), {
       "auction/isActive": true,
       "auction/endTime": newEndTime,
+      "auction/id": auctionId,
+      "auction/itemSnapshot": item,
       "lastBidder": null,
     });
 
-    const item = currentItemRef.current;
-    push(ref(db, `rooms/${roomId}/chat`), {
-    // CHANGE: fix template literal so it's valid JS
-    text: `🛑 ${winnerName} CALLED DIBS ON ${item ? item.name : 'ITEM'} FOR ₹${finalPrice}!`,
+    
+ push(ref(db, `rooms/${roomId}/chat`), {
+    text: `Auction started: ${item?.name || 'ITEM'}`, // change here
     type: 'auction'
-    });
-  };
+  });
+};
 
-  const stopAuction = async () => {
+      const stopAuction = async () => {
       const finalPrice = currentBidRef.current;
-      const item = currentItemRef.current;
-      
-      if (isAuctionActiveRef.current) { 
+
+      const auctionId = currentAuctionIdRef.current; // change here
+      const itemSnapshot = currentAuctionItemRef.current; // change here
+      if (!auctionId) return; // change here
+
+      if (isAuctionActiveRef.current) {
         const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
         const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
         // 2. NEW: Fetch session bids to calculate Top 3 for Moderator
-        const bidsSnap = await get(ref(db, `rooms/${roomId}/currentAuctionBids`));
+        const bidsSnap = await get(ref(db, `rooms/${roomId}/auctionBids/${auctionId}`)); // change here
         let top3 = [];
         if (bidsSnap.exists()) {
             const allBids = Object.values(bidsSnap.val());
@@ -612,22 +627,24 @@ const getPhoneFromUserId = (userId) => {
 
         // 3. NEW: Push to History
         push(ref(db, `rooms/${roomId}/auctionHistory`), {
-          itemName: item ? item.name : "Unknown Item",
-          item: item || null, // CHANGE: snapshot stored here
+          itemName: itemSnapshot ? itemSnapshot.name : "Unknown Item", // change here
+          item: itemSnapshot || null, // change here
           finalPrice: finalPrice,
           winner: winnerName,
           topBidders: top3,
           timestamp: Date.now(),
+          auctionId, // change here (optional but recommended)
+
         });
         
         push(ref(db, `rooms/${roomId}/chat`), {
-            text: `🛑 ${winnerName} CALLED DIBS ON ${item ? item.name : 'ITEM'} FOR ₹${finalPrice}!`,
+            text: `🛑 ${winnerName} CALLED DIBS ON ${itemSnapshot ? itemSnapshot.name : 'ITEM'} FOR ₹${finalPrice}!`, // change here
             type: 'auction'
         });
       }
       // 4. Cleanup
       update(ref(db, `rooms/${roomId}`), { "auction/isActive": false, "auction/endTime": 0 });
-      remove(ref(db, `rooms/${roomId}/currentAuctionBids`)); // Clear temp bids
+      remove(ref(db, `rooms/${roomId}/auctionBids/${auctionId}`)); // change here
   };
 
   const toggleAuction = () => {
