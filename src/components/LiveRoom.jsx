@@ -220,18 +220,18 @@ useEffect(() => {
         }
 
         myClient.on("user-published", async (user, mediaType) => {
-          if (!isActive) return;
-          await myClient.subscribe(user, mediaType);
-          if (mediaType === "video") {
+        if (!isActive) return;
+        await myClient.subscribe(user, mediaType);
+        if (mediaType === "video") {
             const remoteContainer = document.getElementById("remote-video-container");
             if (remoteContainer) {
-                remoteContainer.innerHTML = ''; 
-                user.videoTrack.play(remoteContainer);
-                setVideoReady(true);
-                setIsStreaming(true);
+            remoteContainer.innerHTML = ''; 
+            user.videoTrack.play(remoteContainer, { mirror: true }); // CHANGE: mirror viewer playback
+            setVideoReady(true);
+            setIsStreaming(true);
             }
-          }
-          if (mediaType === "audio") user.audioTrack.play();
+        }
+        if (mediaType === "audio") user.audioTrack.play();
         });
 
         myClient.on("user-unpublished", (user, mediaType) => {
@@ -278,7 +278,7 @@ useEffect(() => {
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
-              camTrack.play(localContainer, { mirror: false });
+              camTrack.play(localContainer, { mirror: true });
               setVideoReady(true);
               setStatus("READY TO AIR");
           }
@@ -354,7 +354,7 @@ const switchCamera = async () => {
     const localContainer = document.getElementById("local-video-container");
     if (localContainer) {
       localContainer.innerHTML = "";
-      currentTrack.play(localContainer, { mirror: false });
+      currentTrack.play(localContainer, { mirror: true });
     }
   } catch (err) {
     console.error("Camera switch failed", err);
