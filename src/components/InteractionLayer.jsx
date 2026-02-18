@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X } from 'lucide-react'; // CHANGE
-import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database';
+import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get, query, limitToLast } from "firebase/database"; //EFF CHANGE
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
 import inventoryRaw from '../inventory.csv?raw';
@@ -72,7 +72,7 @@ const currentAuctionItemRef = useRef(null); // change here
   const persistentUserId = searchParams.get('uid');
 
     useEffect(() => {
-    const chatRef = ref(db, `rooms/${roomId}/chat`);
+     const chatRef = query(ref(db, `rooms/${roomId}/chat`), limitToLast(50)); //EFF CHANGE
     const pinnedRef = ref(db, `rooms/${roomId}/pinnedChat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const auctionRef = ref(db, `rooms/${roomId}/auction`);
@@ -81,10 +81,9 @@ const currentAuctionItemRef = useRef(null); // change here
 
     // CHANGE: custom items live in DB per-room
     const customItemsRef = ref(db, `rooms/${roomId}/customItems`);
-
-    const unsubChat = onValue(chatRef, (snapshot) => {
+    const unsubChat = onValue(chatRef, (snapshot) => { //EFF CHANGE
       const data = snapshot.val();
-      if (data) setMessages(Object.values(data).slice(-50));
+      if (data) setMessages(Object.values(data));
     });
 
     const unsubPinned = onValue(pinnedRef, (snapshot) => {
