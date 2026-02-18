@@ -350,88 +350,73 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
     logEvent(roomId, 'LOGIN_ATTEMPT', { email: inputEmail, phone: cleanPhone });
 
     try {
-        // --- 4. BLOCK LIST CHECK (Global Ban) ---
-        // Checks 'blocked_users/9876543210'. If exists, deny entry.
-        const blockedRef = ref(db, `blocked_users/${cleanPhone}`);
-        const blockSnap = await get(blockedRef);
-        
-        if (blockSnap.exists()) {
-            logEvent(roomId, 'LOGIN_BLOCKED', { phone: cleanPhone });
-            setError("ACCESS DENIED. You are blocked.");
-            setLoading(false);
-            return;
-        }
+  const [blockSnap, testSnapshot, configSnap, guestSnap] = await Promise.all([ //EFF CHANGE
+    get(ref(db, `blocked_users/${cleanPhone}`)),
+    get(ref(db, `test_allowed_guests/${cleanPhone}`)),
+    get(ref(db, "event_config")),
+    get(ref(db, `allowed_guests/${cleanPhone}`)),
+  ]);
 
-        // --- 5. TEST USER CHECK (Bypass Time) ---
-        const testGuestRef = ref(db, `test_allowed_guests/${cleanPhone}`);
-        const testSnapshot = await get(testGuestRef);
+  // --- 4. BLOCK LIST CHECK (Global Ban) ---
+  if (blockSnap.exists()) {
+    logEvent(roomId, 'LOGIN_BLOCKED', { phone: cleanPhone });
+    setError("ACCESS DENIED. You are blocked.");
+    setLoading(false);
+    return;
+  }
 
-        if (testSnapshot.exists()) {
-             if (testSnapshot.val().email.toLowerCase() === inputEmail) {
-                 // NEW: Generate Unique Name for Test User
-                 const uniqueName = await getUniqueUsername(roomId, cleanPhone);
-                 await joinRoom('audience', `TEST-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
-                 return;
-             } else {
-                 setError("Test Email mismatch."); setLoading(false); return;
-             }
-        }
-
-        // --- 6. TIME GATE (Applies to Registered AND Spectators) ---
-        // If we reached here, you are NOT a test user, so you must obey time.
-        const configRef = ref(db, `event_config`);
-        const configSnap = await get(configRef);
-        
-        if (configSnap.exists()) {
-            const config = configSnap.val();
-            const now = new Date();
-            const start = new Date(config.startTime);
-            const end = new Date(config.endTime);
-
-            if (config.isMaintenanceMode) {
-                setWaitingMessage("SYSTEM UNDER MAINTENANCE.");
-                setCurrentScreen('waiting'); setLoading(false); return;
-            }
-            if (now < start) {
-                setWaitingMessage("WAIT FOR THE NEXT DROP.");
-                setNextEventTime(config.startTime);
-                setCurrentScreen('waiting'); setLoading(false); return;
-            }
-            if (now > end) {
-                setWaitingMessage("THIS EVENT HAS ENDED.");
-                setCurrentScreen('waiting'); setLoading(false); return;
-            }
-        }
-
-        // --- 7. ALLOWED GUEST CHECK ---
-        const guestRef = ref(db, `allowed_guests/${cleanPhone}`);
-        const snapshot = await get(guestRef);
-
-        if (snapshot.exists()) {
-            // REGISTERED USER
-            if (snapshot.val().email.toLowerCase() !== inputEmail) {
-                setError("Email does not match records."); setLoading(false); return;
-            }
-            // --- NEW: Generate Name ---
-            const uniqueName = await getUniqueUsername(roomId, cleanPhone);
-
-            // Join as Audience
-            logEvent(roomId, 'LOGIN_SUCCESS', { role: 'audience', phone: cleanPhone });
-            await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
-        } else {
-            // --- 8. UNREGISTERED -> SPECTATOR POPUP ---
-            // Valid phone, valid time, not blocked, but not on list.
-            setTempCredentials({ email: inputEmail, phone: cleanPhone });
-            setLoading(false);
-            logEvent(roomId, 'LOGIN_UNKNOWN_USER', { phone: cleanPhone });
-            setShowSpectatorModal(true); 
-        }
-
-    } catch (err) {
-        console.error(err); 
-        setError("System Error. Try again."); 
-        setLoading(false); 
+  // --- 5. TEST USER CHECK (Bypass Time) ---
+  if (testSnapshot.exists()) {
+    if (testSnapshot.val().email.toLowerCase() === inputEmail) {
+      const uniqueName = await getUniqueUsername(roomId, cleanPhone);
+      await joinRoom('audience', `TEST-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
+      return;
+    } else {
+      setError("Test Email mismatch."); setLoading(false); return;
     }
+  }
+
+  // --- 6. TIME GATE (Applies to Registered AND Spectators) ---
+  if (configSnap.exists()) {
+    const config = configSnap.val();
+    const now = new Date();
+    const start = new Date(config.startTime);
+    const end = new Date(config.endTime);
+
+    if (config.isMaintenanceMode) {
+      setWaitingMessage("SYSTEM UNDER MAINTENANCE.");
+      setCurrentScreen('waiting'); setLoading(false); return;
+    }
+    if (now < start) {
+      setWaitingMessage("WAIT FOR THE NEXT DROP.");
+      setNextEventTime(config.startTime);
+      setCurrentScreen('waiting'); setLoading(false); return;
+    }
+    if (now > end) {
+      setWaitingMessage("THIS EVENT HAS ENDED.");
+      setCurrentScreen('waiting'); setLoading(false); return;
+    }
+  }
+
+  // --- 7. ALLOWED GUEST CHECK ---
+  if (guestSnap.exists()) {
+    if (guestSnap.val().email.toLowerCase() !== inputEmail) {
+      setError("Email does not match records."); setLoading(false); return;
+    }
+    const uniqueName = await getUniqueUsername(roomId, cleanPhone);
+    logEvent(roomId, 'LOGIN_SUCCESS', { role: 'audience', phone: cleanPhone });
+    await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
+  } else {
+    setTempCredentials({ email: inputEmail, phone: cleanPhone });
+    setLoading(false);
+    logEvent(roomId, 'LOGIN_UNKNOWN_USER', { phone: cleanPhone });
+    setShowSpectatorModal(true); 
+  }
+} catch (err) {
+  console.error(err);
+  setError("System Error. Try again.");
+  setLoading(false);
+}
   };
 
   const confirmSpectatorJoin = async () => {
