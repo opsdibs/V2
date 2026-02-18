@@ -291,7 +291,8 @@ export const LoginPage = () => {
     setLoading(true);
 
     const inputEmail = email.trim().toLowerCase();
-    const inputKey = authKey.trim();
+    const inputKey = authKey.trim().toLowerCase(); // CHANGE: lowercase host/mod input
+
 
     // --- 1. FORMAT VALIDATION ---
     if (!validateEmail(inputEmail)) { 
@@ -304,10 +305,10 @@ export const LoginPage = () => {
     }
 
     // Credentials
-    const HOST_EMAIL = (import.meta.env.VITE_HOST_EMAIL || "").toLowerCase();
-    const HOST_PWD = import.meta.env.VITE_HOST_PWD;
+   const HOST_EMAIL = (import.meta.env.VITE_HOST_EMAIL || "").toLowerCase();
+    const HOST_PWD = (import.meta.env.VITE_HOST_PWD || "").toLowerCase(); // CHANGE: normalize stored host pwd
     const MOD_EMAIL = (import.meta.env.VITE_MODERATOR_EMAIL || "").toLowerCase();
-    const MOD_PWD = import.meta.env.VITE_MODERATOR_PWD;
+    const MOD_PWD = (import.meta.env.VITE_MODERATOR_PWD || "").toLowerCase(); // CHANGE: normalize stored mod pwd
 
     // --- 2. HOST/MOD CHECK (Bypass Everything) ---
 if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
