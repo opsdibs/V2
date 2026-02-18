@@ -481,7 +481,6 @@ const switchCamera = async () => {
                         style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
                     >
                         <Radio className="w-4 h-4 text-red-600 animate-pulse" />
-                        GO LIVE
                     </button>
                 ) : (
                     <button 
@@ -489,7 +488,6 @@ const switchCamera = async () => {
                         className="absolute right-4 pointer-events-auto bg-red-600 text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60]"
                         style={{ bottom: 'calc(8.5rem + env(safe-area-inset-bottom))' }}
                     >
-                        END STREAM
                     </button>
                 )}
             </>
