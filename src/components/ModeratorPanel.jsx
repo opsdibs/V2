@@ -21,64 +21,40 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   // 1. Fetch & Process Audience List
   useEffect(() => {
     const usersRef = ref(db, `rooms/${roomId}/audience_index`); //EFF CHANGE
-    return onValue(usersRef, (snapshot) => { //EFF CHANGE
-      const data = snapshot.val();
-      if (data) {
-        const now = Date.now();
-        const rawList = Object.entries(data).map(([key, val]) => ({
-          dbKey: key,
-          ...val
-        }));
-        
-        const latestHost =
-        rawList
-        .filter(u => u.role === 'host')
-        .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))[0] || null;
-        setHostUser(latestHost);
-        
+return onValue(usersRef, (snapshot) => { //EFF CHANGE
+  const data = snapshot.val() || {};
 
-        // Processing Pipeline:
-        const processed = rawList
-          // 1. Exclude Host & Moderator
-          .filter(u => u.role !== 'host' && u.role !== 'moderator') 
-          
-          // 2. Deduplicate (Keep most recent session per userId)
-          .reduce((acc, current) => {
-            const existingIndex = acc.findIndex(u => u.userId === current.userId);
-            if (existingIndex === -1) {
-              acc.push(current);
-            } else {
-              // If current is newer, replace existing
-              if (current.joinedAt > acc[existingIndex].joinedAt) {
-                acc[existingIndex] = current;
-              }
-            }
-            return acc;
-          }, [])
+  const rawList = Object.entries(data).map(([userId, val]) => ({
+    userId,
+    dbKey: val.lastSessionKey || null, //EFF CHANGE
+    ...val
+  }));
 
-          // 3. Mark Online Status & Check Time Window
-          .map(user => {
-            const presence = onlineData[user.userId];
-            return {
-                ...user,
-                isOnline: !!presence, // True if key exists
-                presenceState: presence ? presence.state : 'offline' // 'online' | 'idle' | 'offline'
-            };
-          })
-          .filter(user => {
-            // Keep if Online OR (Offline but joined within last 2 hours)
-            return user.isOnline || (now - user.joinedAt < TWO_HOURS_MS);
-          })
+  const latestHost =
+    rawList
+      .filter(u => u.role === 'host')
+      .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0] || null;
+  setHostUser(latestHost);
 
-          // 4. Sort: Online first, then by Join Time
-          .sort((a, b) => {
-            if (a.isOnline === b.isOnline) return b.joinedAt - a.joinedAt;
-            return a.isOnline ? -1 : 1;
-          });
-
-        setUsers(processed);
-      }
+  const processed = rawList
+    .filter(u => u.role !== 'host' && u.role !== 'moderator')
+    .map(user => {
+      const presence = onlineData[user.userId];
+      return {
+        ...user,
+        isOnline: !!presence,
+        presenceState: presence ? presence.state : 'offline'
+      };
+    })
+    .sort((a, b) => {
+      if (a.isOnline === b.isOnline) return (b.lastSeen || 0) - (a.lastSeen || 0);
+      return a.isOnline ? -1 : 1;
     });
+
+  setUsers(processed);
+});
+    
+    
   }, [roomId, onlineData]); // Added onlineIds as dependency to re-sort when presence changes
 
   // 2. Fetch Auction History
