@@ -466,6 +466,20 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
             joinedAt: Date.now(),
             restrictions: { isMuted: false, isBidBanned: false, isKicked: false }
         });
+        const indexRef = ref(db, `rooms/${roomId}/audience_index/${uId}`); //EFF CHANGE
+        const indexSnap = await get(indexRef); //EFF CHANGE
+        const firstSeen = indexSnap.exists() ? indexSnap.val().firstSeen : Date.now(); //EFF CHANGE
+
+        await update(indexRef, { //EFF CHANGE
+            userId: uId,
+            username: finalName,
+            email: mail,
+            phone: phone,
+            role: role,
+            firstSeen,
+            lastSeen: Date.now(),
+            lastSessionKey: userRef.key,
+        });
         navigate(`/room/${roomId}?dbKey=${userRef.key}&uid=${uId}&role=${role}`);
     } catch (err) {
         setError("Failed to join."); setLoading(false);

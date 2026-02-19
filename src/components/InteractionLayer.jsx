@@ -218,11 +218,18 @@ const currentAuctionItemRef = useRef(null); // change here
           // Helper: Updates status in DB
           // We now store an OBJECT instead of just 'true'
           const updateStatus = (status) => {
-              set(myPresenceRef, {
-                  state: status,       // 'online' or 'idle'
-                  lastChanged: Date.now()
-              }).catch(err => console.error("Presence Write Failed:", err));
-          };
+          const now = Date.now();
+
+          set(myPresenceRef, {
+            state: status,
+            lastChanged: now
+          }).catch(err => console.error("Presence Write Failed:", err));
+
+          update(ref(db), { //EFF CHANGE
+            [`rooms/${roomId}/audience_index/${persistentUserId}/presenceState`]: status,
+            [`rooms/${roomId}/audience_index/${persistentUserId}/lastSeen`]: now,
+          }).catch(err => console.error("Index Presence Update Failed:", err));
+        };
 
           // 1. Initial Set: Online
           updateStatus('online');

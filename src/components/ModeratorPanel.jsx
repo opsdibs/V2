@@ -20,8 +20,8 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
 
   // 1. Fetch & Process Audience List
   useEffect(() => {
-    const usersRef = ref(db, `audience_data/${roomId}`);
-    return onValue(usersRef, (snapshot) => {
+    const usersRef = ref(db, `rooms/${roomId}/audience_index`); //EFF CHANGE
+    return onValue(usersRef, (snapshot) => { //EFF CHANGE
       const data = snapshot.val();
       if (data) {
         const now = Date.now();
@@ -118,6 +118,7 @@ useEffect(() => {
 }, [roomId]);
 
     // --- ACTIONS ---
+  const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
   const toggleRestriction = (user, type) => {
     // type = 'isMuted' or 'isBidBanned'
     const updates = {};
@@ -276,9 +277,17 @@ useEffect(() => {
             .filter(user => {
                 if (!searchTerm) return true;
                 const term = searchTerm.toLowerCase();
-                const name = (user.username || user.userId).toLowerCase();
-                const id = user.userId.toLowerCase();
-                return name.includes(term) || id.includes(term);
+                  const name = (user.username || user.userId || "").toLowerCase();
+                  const id = (user.userId || "").toLowerCase();
+                  const email = (user.email || "").toLowerCase();
+                  const phone = (user.phone || "").toLowerCase();
+
+                  return (
+                    name.includes(term) ||
+                    id.includes(term) ||
+                    email.includes(term) ||
+                    phone.includes(term)
+                  );
             }).map(user => {
                 const isSpectator = user.role === 'spectator';
                 // FIX: Use the property that already exists on the user object
