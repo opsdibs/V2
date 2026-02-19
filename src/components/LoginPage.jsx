@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, AlertCircle, Key, Mail, Lock, X } from 'lucide-react';
-import { ref, push, set, get } from 'firebase/database';
+import { ref, push, set, get, update } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { logEvent } from '../lib/analytics';
 import { NAME_LIST } from '../lib/username_list';
