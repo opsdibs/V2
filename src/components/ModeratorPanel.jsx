@@ -93,22 +93,21 @@ useEffect(() => {
   };
 }, [roomId]);
 
-    // --- ACTIONS ---
-  const toggleRestriction = (user, type) => {
-    const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
-    // type = 'isMuted' or 'isBidBanned'
-    const updates = {};
-    updates[`audience_data/${roomId}/${user.dbKey}/restrictions/${type}`] = !user.restrictions?.[type];
-    update(ref(db), updates);
-  };
+      // --- ACTIONS ---
+    const toggleRestriction = (user, type) => {
+      const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
+      const updates = {};
+      updates[`audience_data/${roomId}/${sessionKey}/restrictions/${type}`] = !user.restrictions?.[type];
+      update(ref(db), updates);
+    };
 
-  const kickUser = (user) => {
-    const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
-    if(!window.confirm(`Kick ${user.userId}?`)) return;
-    const updates = {};
-    updates[`audience_data/${roomId}/${user.dbKey}/restrictions/isKicked`] = true;
-    update(ref(db), updates);
-  };
+    const kickUser = (user) => {
+      const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
+      if (!window.confirm(`Kick ${user.userId}?`)) return;
+      const updates = {};
+      updates[`audience_data/${roomId}/${sessionKey}/restrictions/isKicked`] = true;
+      update(ref(db), updates);
+    };
 
   // CHANGE HERE: moderator mutes/unmutes host chat
   const setHostChatMuted = async (enabled) => {
