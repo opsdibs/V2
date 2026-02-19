@@ -94,8 +94,8 @@ useEffect(() => {
 }, [roomId]);
 
     // --- ACTIONS ---
-  const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
   const toggleRestriction = (user, type) => {
+    const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
     // type = 'isMuted' or 'isBidBanned'
     const updates = {};
     updates[`audience_data/${roomId}/${user.dbKey}/restrictions/${type}`] = !user.restrictions?.[type];
@@ -103,6 +103,7 @@ useEffect(() => {
   };
 
   const kickUser = (user) => {
+    const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
     if(!window.confirm(`Kick ${user.userId}?`)) return;
     const updates = {};
     updates[`audience_data/${roomId}/${user.dbKey}/restrictions/isKicked`] = true;
