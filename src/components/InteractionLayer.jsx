@@ -737,12 +737,12 @@ const getPhoneFromUserId = (userId) => {
 {/* 2. CHAT STREAM (Dynamic Width)  */}
 <div 
   ref={chatContainerRef} 
-  className={`${leftColumnClass} h-40 overflow-y-auto pointer-events-auto pr-2 mb-2 transition-all duration-300`}
+  className={`${leftColumnClass} h-40 overflow-y-auto pointer-events-auto pr- transition-all duration-300`}
   style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 50%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
 >
 
           {/* ... (Keep existing chat message mapping code) ... */}
-            <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
+            <div className="min-h-full flex flex-col justify-end gap-2 pb-1">
             <AnimatePresence initial={false}>
                 {messages.map((msg, i) => (
                 <motion.div
@@ -814,10 +814,10 @@ const getPhoneFromUserId = (userId) => {
       <div className="flex justify-between items-end w-full pointer-events-none">
         
         {/* LEFT COLUMN: Chat Input + Item Card (Dynamic Width) */}
-        <div className={`flex flex-col gap-2 pointer-events-auto transition-all duration-300 ${leftColumnClass}`}>
+        <div className={`flex flex-col gap-1 pointer-events-auto transition-all duration-300 ${leftColumnClass}`}>
             
             {/* Chat Input */}
-            <form onSubmit={sendMessage} className="relative group w-full mb-2">
+            <form onSubmit={sendMessage} className="relative group w-full mb-1">
                 <input 
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
