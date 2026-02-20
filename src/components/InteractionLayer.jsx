@@ -25,6 +25,17 @@ const parseInventory = () => {
 
 const INVENTORY = parseInventory();
 
+const glassSurface =
+  "relative overflow-hidden rounded-2xl " +
+  "backdrop-blur-md bg-black/50 " +
+  "border border-white/15 " +
+  "shadow-[0_10px_30px_rgba(0,0,0,0.35)]";
+
+const glassHighlight =
+  "before:content-[''] before:absolute before:inset-0 " +
+  "before:bg-gradient-to-b before:from-white/12 before:to-transparent " +
+  "before:pointer-events-none";
+
 export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, assignedUsername}) => {
   const [messages, setMessages] = useState([]);
   const [pinnedMessage, setPinnedMessage] = useState(null);
@@ -671,7 +682,7 @@ const getPhoneFromUserId = (userId) => {
       
       {/* TOP CENTER: VIEWERS */}
       <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
-          <div className="bg-black/20 backdrop-blur border border-white/20 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
+          <div className={`${glassSurface} ${glassHighlight} rounded-full px-3 py-1 flex items-center gap-2`}>
               <Eye className="w-3 h-3 text-red-500 animate-pulse" />
               <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
           </div>
@@ -680,7 +691,7 @@ const getPhoneFromUserId = (userId) => {
       {/* TOP RIGHT: STATS (Unchanged) */}
       <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
-          <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-black/60 border-[#FF6600]' : 'bg-black/40 border-white/10'}`}>
+          <div className={`${glassSurface} ${glassHighlight} p-2 min-w-fit px-4 flex flex-col items-end transition-colors ${isAuctionActive ? 'bg-black/60 border-[#FF6600]' : ''}`}>
           <span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-red-500' : 'text-[#FF6600]'}`}>
             {isAuctionActive ? "Current Bid" : "Starting Price"}
           </span>
