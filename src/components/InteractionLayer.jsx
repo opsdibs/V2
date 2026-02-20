@@ -681,8 +681,8 @@ const getPhoneFromUserId = (userId) => {
       <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
 
-          <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-[#FF6600]/15 border-[#FF6600]' : 'bg-black/40 border-white/10'}`}>
-              <span className="text-[10px] font-display uppercase font-bold tracking-wider mb-1 px-1 text-[#FF6600]">
+          <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}`}>
+              <span className={`text-[10px] font-display uppercase font-bold tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-red-500' : 'text-[#FF6600]'}`}>
                 {isAuctionActive ? "Current Bid" : "Starting Price"}
               </span>
               {/* --- CHANGE 1: RESTORED HOST PRICE CONTROLS --- */}
@@ -727,7 +727,7 @@ const getPhoneFromUserId = (userId) => {
           </div>
 
           {isAuctionActive && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-display text-sm font-bold border border-[#FF6600] bg-[#FF6600]/15 text-[#FF6600] ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-display text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}>
                   <Clock className="w-3 h-3" />
                   <span>00:{timeLeft.toString().padStart(2, '0')}</span>
               </motion.div>
