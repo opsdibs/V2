@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw, Shield } from 'lucide-react';
+import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw, Shield, Square } from 'lucide-react';
 import { AGORA_APP_ID, AGORA_TOKEN } from '../lib/settings';
 import { InteractionLayer } from './InteractionLayer';
 import { ModeratorPanel } from './ModeratorPanel';
@@ -473,24 +473,21 @@ const switchCamera = async () => {
         </div>
 
         {isHost && videoReady && (
-            <>
-                {!isStreaming ? (
-                    <button 
-                        onClick={handleToggleStream}
-                        className="absolute right-4 pointer-events-auto bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60]"
-                        style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
-                    >
-                        <Radio className="w-4 h-4 text-red-600 animate-pulse" />
-                    </button>
-                ) : (
-                    <button 
-                        onClick={handleToggleStream}
-                        className="absolute right-4 pointer-events-auto bg-red-600 text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60]"
-                        style={{ bottom: 'calc(8.5rem + env(safe-area-inset-bottom))' }}
-                    >
-                    </button>
-                )}
-            </>
+            <button
+              onClick={handleToggleStream}
+              className={`absolute right-4 pointer-events-auto px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center justify-center gap-2 z-[60] ${
+                isStreaming ? 'bg-red-600 text-white' : 'bg-white text-black'
+              }`}
+              style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
+              title={isStreaming ? 'End Stream' : 'Go Live'}
+              aria-label={isStreaming ? 'End Stream' : 'Go Live'}
+            >
+              {isStreaming ? (
+                <Square className="w-4 h-4 fill-current" />
+              ) : (
+                <Radio className="w-4 h-4 text-red-600 animate-pulse" />
+              )}
+            </button>
         )}
         
         {isModerator && showModPanel && (
