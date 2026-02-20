@@ -678,9 +678,8 @@ const getPhoneFromUserId = (userId) => {
       </div>
 
       {/* TOP RIGHT: STATS (Unchanged) */}
-      <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
+      <div className="absolute top-[calc(2.75rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
-
           <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}`}>
               <span className={`text-[10px] font-display uppercase font-bold tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-red-500' : 'text-[#FF6600]'}`}>
                 {isAuctionActive ? "Current Bid" : "Starting Price"}
@@ -734,7 +733,7 @@ const getPhoneFromUserId = (userId) => {
           )}
       </div>
     
-    <div className="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end z-30 pointer-events-none h-[85%]">
+<div className="absolute inset-x-0 bottom-0 px-4 pt-4 pb-2 flex flex-col justify-end z-30 pointer-events-none h-[85%]">
 
       
  
