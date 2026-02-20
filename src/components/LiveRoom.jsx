@@ -478,9 +478,9 @@ const switchCamera = async () => {
               className={`absolute right-4 pointer-events-auto h-14 w-14 rounded-full transition-transform hover:scale-105 shadow-2xl flex items-center justify-center z-[60] ${
                 isStreaming
                   ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'bg-white text-black border-2 border-black/80 hover:bg-zinc-100'
+                  : 'bg-white text-black hover:bg-zinc-100'
               }`}
-              style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
+              style={{ bottom: 'calc(6.25rem + env(safe-area-inset-bottom))' }}
               title={isStreaming ? 'End Stream' : 'Go Live'}
               aria-label={isStreaming ? 'End Stream' : 'Go Live'}
             >
