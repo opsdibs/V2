@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X } from 'lucide-react'; // CHANGE
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Square, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X } from 'lucide-react'; // CHANGE
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get, query, limitToLast } from "firebase/database"; //EFF CHANGE
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
@@ -1050,14 +1050,15 @@ const getPhoneFromUserId = (userId) => {
                 {isHost && (
                     <button
                     onClick={toggleAuction}
-                    className={`h-10 px-8 mb-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg z-50 pointer-events-auto ${
+                    className={`h-14 w-14 mb-4 rounded-full flex items-center justify-center transition-all shadow-lg z-50 pointer-events-auto ${
                         isAuctionActive
                         ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
                         : 'bg-dibs-neon text-black hover:bg-white'
                     }`}
+                    title={isAuctionActive ? 'Stop Auction' : 'Start Auction'}
+                    aria-label={isAuctionActive ? 'Stop Auction' : 'Start Auction'}
                     >
-                    {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                    {isAuctionActive ? "STOP" : ""}
+                    {isAuctionActive ? <Square className="w-5 h-5 fill-current" /> : <Gavel className="w-5 h-5" />}
                     </button>
                 )}
 

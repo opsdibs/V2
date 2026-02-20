@@ -475,17 +475,19 @@ const switchCamera = async () => {
         {isHost && videoReady && (
             <button
               onClick={handleToggleStream}
-              className={`absolute right-4 pointer-events-auto px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center justify-center gap-2 z-[60] ${
-                isStreaming ? 'bg-red-600 text-white' : 'bg-white text-black'
+              className={`absolute right-4 pointer-events-auto h-14 w-14 rounded-full transition-transform hover:scale-105 shadow-2xl flex items-center justify-center z-[60] ${
+                isStreaming
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'bg-white text-black border-2 border-black/80 hover:bg-zinc-100'
               }`}
               style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
               title={isStreaming ? 'End Stream' : 'Go Live'}
               aria-label={isStreaming ? 'End Stream' : 'Go Live'}
             >
               {isStreaming ? (
-                <Square className="w-4 h-4 fill-current" />
+                <Square className="w-5 h-5 fill-current" />
               ) : (
-                <Radio className="w-4 h-4 text-red-600 animate-pulse" />
+                <Radio className="w-5 h-5 text-red-600 animate-pulse" />
               )}
             </button>
         )}
