@@ -680,7 +680,7 @@ const getPhoneFromUserId = (userId) => {
       {/* TOP RIGHT: STATS (Unchanged) */}
       <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
-          <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-black/60 border-red-500/40' : 'bg-black/40 border-white/10'}`}>
+          <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-black/60 border-[#FF6600]' : 'bg-black/40 border-white/10'}`}>
           <span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-red-500' : 'text-[#FF6600]'}`}>
             {isAuctionActive ? "Current Bid" : "Starting Price"}
           </span>
