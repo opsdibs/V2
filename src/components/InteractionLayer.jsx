@@ -671,7 +671,7 @@ const getPhoneFromUserId = (userId) => {
       
       {/* TOP CENTER: VIEWERS */}
       <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
-          <div className="bg-black/40 backdrop-blur border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
+          <div className="bg-black/10 backdrop-blur border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
               <Eye className="w-3 h-3 text-red-500 animate-pulse" />
               <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
           </div>
