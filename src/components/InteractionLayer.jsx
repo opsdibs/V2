@@ -46,11 +46,13 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
 
   const [showInventory, setShowInventory] = useState(false);
 
+
   // CHANGE: modal state for adding custom items
   const [showAddCustomItem, setShowAddCustomItem] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemDesc, setNewItemDesc] = useState("");
+  
 const chatEndRef = useRef(null);
 const chatContainerRef = useRef(null);
 const isAuctionActiveRef = useRef(false);
@@ -63,7 +65,6 @@ const currentAuctionIdRef = useRef(null); // change here
 const currentAuctionItemRef = useRef(null); // change here
 
   const stopTriggeredRef = useRef(false);
-  const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   // For enforcing bans/kicks
   const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false });
@@ -297,9 +298,10 @@ const currentAuctionItemRef = useRef(null); // change here
   ];
 
   // CHANGE: reset by selected item instead of numeric id
-  useEffect(() => {
-    setIsDescExpanded(false);
+ useEffect(() => {
   }, [selectedItem?.kind, selectedItem?.id]);
+
+
 
   // --- LISTEN FOR MODERATOR ACTIONS ---
   useEffect(() => {
@@ -831,7 +833,7 @@ const getPhoneFromUserId = (userId) => {
             <div className="z-[60] mb-4 relative">
                 <AnimatePresence>
                 {/* CHANGE: host OR moderator can open inventory and add custom items */}
-                {showInventory && (isHost || isModerator) && (
+                {showInventory && (
                   <motion.div
                     initial={{ opacity: 0, y: 20, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -841,57 +843,75 @@ const getPhoneFromUserId = (userId) => {
                     <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-500 bg-black/50 flex items-center justify-between gap-2">
                       <span>{isHost ? "Select Item to Auction" : "Inventory"}</span>
 
-                      {/* CHANGE: custom add button */}
-                      <button
-                        type="button"
-                        onClick={openAddCustomItem}
-                        className="pointer-events-auto text-[10px] font-black uppercase tracking-widest bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-lg border border-white/10 transition-colors"
-                      >
-                        + Custom
-                      </button>
+                      {(isHost || isModerator) && (
+                        <button
+                          type="button"
+                          onClick={openAddCustomItem}
+                          className="pointer-events-auto text-[10px] font-black uppercase tracking-widest bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-lg border border-white/10 transition-colors"
+                        >
+                          + Custom
+                        </button>
+                      )}
                     </div>
 
                     {inventoryItems.map((item) => {
                       const canSelect = isHost && !isAuctionActive; // CHANGE: only host selects item
+                      if (isHost || isModerator) {
+                        return (
+                          <button
+                            key={`${item.kind}:${item.id}`}
+                            type="button"
+                            onClick={() => {
+                              if (canSelect) selectItem(item);
+                            }}
+                            disabled={!canSelect}
+                            className={`p-3 text-left transition-colors border-b border-white/5 last:border-0 group ${
+                              canSelect ? "hover:bg-white/10" : "opacity-60 cursor-not-allowed"
+                            }`}
+                          >
+                            <div className="flex justify-between items-center w-full gap-2">
+                              <span className="text-sm font-bold text-white ...">
+                                  {item.name}
+                                  {item.kind === "custom" && (<span className="ml-1 ...">(Custom)</span>)}
+                              </span>
+
+                              <div className="flex items-center gap-2">
+                                  <span className="text-xs font-display text-dibs-neon">₹{item.startPrice}</span>
+
+                                  {item.kind === "custom" && (isHost || isModerator) && (
+                                  <button
+                                      type="button"
+                                      onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteCustomItem(item.id);
+                                      }}
+                                      className="p-1 rounded-md bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 transition-colors"
+                                      title="Delete custom item"
+                                  >
+                                      <Trash2 className="w-4 h-4" />
+                                  </button>
+                                  )}
+                              </div>
+                              </div>
+                            <span className="text-xs text-zinc-400 truncate block mt-0.5">{item.desc}</span>
+                          </button>
+                        );
+                      }
+
                       return (
-                        <button
+                        <div
                           key={`${item.kind}:${item.id}`}
-                          type="button"
-                          onClick={() => {
-                            if (canSelect) selectItem(item);
-                          }}
-                          disabled={!canSelect}
-                          className={`p-3 text-left transition-colors border-b border-white/5 last:border-0 group ${
-                            canSelect ? "hover:bg-white/10" : "opacity-60 cursor-not-allowed"
-                          }`}
+                          className="p-3 text-left transition-colors border-b border-white/5 last:border-0"
                         >
                           <div className="flex justify-between items-center w-full gap-2">
                             <span className="text-sm font-bold text-white ...">
-                                {item.name}
-                                {item.kind === "custom" && (<span className="ml-1 ...">(Custom)</span>)}
+                              {item.name}
+                              {item.kind === "custom" && (<span className="ml-1 ...">(Custom)</span>)}
                             </span>
-
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-display text-dibs-neon">₹{item.startPrice}</span>
-
-                                {/* CHANGE: delete button only for custom items */}
-                                {item.kind === "custom" && (isHost || isModerator) && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteCustomItem(item.id);
-                                    }}
-                                    className="p-1 rounded-md bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 transition-colors"
-                                    title="Delete custom item"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                                )}
-                            </div>
-                            </div>
+                            <span className="text-xs font-display text-dibs-neon">₹{item.startPrice}</span>
+                          </div>
                           <span className="text-xs text-zinc-400 truncate block mt-0.5">{item.desc}</span>
-                        </button>
+                        </div>
                       );
                     })}
                   </motion.div>
@@ -908,32 +928,36 @@ const getPhoneFromUserId = (userId) => {
                       ${(isHost && !isAuctionActive) || isModerator ? "cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all" : ""}
                     `}
                   >
-                    <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-[#FF6600] uppercase tracking-wider">
                         {selectedItem.kind === "custom" ? "CUSTOM ITEM" : `ITEM #${selectedItem.id}`}
                       </span>
-                      {((isHost && !isAuctionActive) || isModerator) && (
+                                            {((isHost && !isAuctionActive) || isModerator) ? (
                         <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? "rotate-180" : ""}`} />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowInventory(!showInventory);
+                          }}
+                          className="p-1 rounded-md hover:bg-white/5 transition-colors"
+                          aria-label="Toggle inventory"
+                        >
+                          <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? "rotate-180" : ""}`} />
+                        </button>
                       )}
+
                     </div>
+
 
                     <h3 className="text-lg font-bold text-white leading-tight truncate mt-0.5">{selectedItem.name}</h3>
 
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsDescExpanded(!isDescExpanded);
-                      }}
-                      className={`text-xs text-zinc-400 cursor-pointer transition-all duration-300 ${
-                        isDescExpanded ? "whitespace-normal break-words" : "truncate"
-                      }`}
-                    >
+                    <div className="text-xs text-zinc-400 truncate">
                       {selectedItem.desc}
-                      {!isDescExpanded && selectedItem.desc.length > 30 && (
-                        <span className="text-[10px] text-[#FF6600] ml-1 font-bold opacity-80">more</span>
-                      )}
                     </div>
                   </div>
+
                 ) : (
                   (isHost || isModerator) && (
                     <button
