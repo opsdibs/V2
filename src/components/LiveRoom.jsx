@@ -260,7 +260,7 @@ useEffect(() => {
                 encoderConfig: {
                     width: 1280,
                     height: 720,
-                    frameRate: 15,
+                    frameRate: 30,
                     bitrateMax: 800,   // cap
                     // bitrateMin: 120  // optional
                 },
