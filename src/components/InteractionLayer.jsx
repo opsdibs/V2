@@ -691,8 +691,8 @@ const getPhoneFromUserId = (userId) => {
       {/* TOP RIGHT: STATS (Unchanged) */}
       <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
-          <div className={`${glassSurface} ${glassHighlight} p-2 min-w-fit px-4 flex flex-col items-end transition-colors ${isAuctionActive ? 'bg-red-900/30 border-[#FF6600]' : ''}`}>
-          <span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-red-500' : 'text-[#FF6600]'}`}>
+          <div className={`${glassSurface} ${glassHighlight} p-2 min-w-fit px-4 flex flex-col items-end transition-colors ${isAuctionActive ? 'bg-red-600/45 border-[#FF6600]' : ''}`}>
+          <span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-white' : 'text-[#FF6600]'}`}>
             {isAuctionActive ? "Current Bid" : "Starting Price"}
           </span>
               {/* --- CHANGE 1: RESTORED HOST PRICE CONTROLS --- */}
