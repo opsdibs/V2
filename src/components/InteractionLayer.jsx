@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Square, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X } from 'lucide-react'; // CHANGE
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X } from 'lucide-react'; // CHANGE
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get, query, limitToLast } from "firebase/database"; //EFF CHANGE
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
@@ -1072,7 +1072,7 @@ const getPhoneFromUserId = (userId) => {
                     title={isAuctionActive ? 'Stop Auction' : 'Start Auction'}
                     aria-label={isAuctionActive ? 'Stop Auction' : 'Start Auction'}
                     >
-                    {isAuctionActive ? <Square className="w-5 h-5 fill-current" /> : <Gavel className="w-5 h-5" />}
+                    {isAuctionActive ? <X className="w-5 h-5" /> : <Gavel className="w-5 h-5" />}
                     </button>
                 )}
 
