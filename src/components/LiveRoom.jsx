@@ -262,7 +262,7 @@ useEffect(() => {
                     height: 720,
                     frameRate: 30,
                     bitrateMax: 800,   // cap
-                    // bitrateMin: 120  // optional
+                    bitrateMin: 500 // optional
                 },
                 optimizationMode: "motion"
                 }
