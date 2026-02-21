@@ -255,7 +255,17 @@ useEffect(() => {
              // This prevents "Timeout starting video source" errors
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
-                 { encoderConfig: "720p_1", facingMode: cameraFacingMode } // rear/front only
+                 {
+                facingMode: cameraFacingMode,
+                encoderConfig: {
+                    width: 1280,
+                    height: 720,
+                    frameRate: 15,
+                    bitrateMax: 800,   // cap
+                    // bitrateMin: 120  // optional
+                },
+                optimizationMode: "motion"
+                }
 
              );
              micTrack = tracks[0];
