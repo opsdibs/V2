@@ -41,6 +41,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [pinnedMessage, setPinnedMessage] = useState(null);
   const [input, setInput] = useState("");
   const [currentBid, setCurrentBid] = useState(0);
+  const [bidIncrement, setBidIncrement] = useState(10); // BIDINCREMENt CHANGE
   const [customBid, setCustomBid] = useState(10);
   const [viewerCount, setViewerCount] = useState(0);
   const [username, setUsername] = useState("");
@@ -68,6 +69,8 @@ const chatEndRef = useRef(null);
 const chatContainerRef = useRef(null);
 const isAuctionActiveRef = useRef(false);
 const currentBidRef = useRef(0);
+const bidIncrementRef = useRef(10); // BIDINCREMENt CHANGE
+
 
 // CHANGE: ref holds the same snapshot as selectedItem (not just an id)
 const currentItemRef = useRef(null);
@@ -84,26 +87,27 @@ const currentAuctionItemRef = useRef(null); // change here
   const persistentUserId = searchParams.get('uid');
 
     useEffect(() => {
-     const chatRef = query(ref(db, `rooms/${roomId}/chat`), limitToLast(50)); //EFF CHANGE
-    const pinnedRef = ref(db, `rooms/${roomId}/pinnedChat`);
-    const bidRef = ref(db, `rooms/${roomId}/bid`);
-    const auctionRef = ref(db, `rooms/${roomId}/auction`);
-    const viewersRef = ref(db, `rooms/${roomId}/viewers`);
-    const itemRef = ref(db, `rooms/${roomId}/currentItem`);
+  const chatRef = query(ref(db, `rooms/${roomId}/chat`), limitToLast(50)); //EFF CHANGE
+  const pinnedRef = ref(db, `rooms/${roomId}/pinnedChat`);
+  const bidRef = ref(db, `rooms/${roomId}/bid`);
+  const auctionRef = ref(db, `rooms/${roomId}/auction`);
+  const viewersRef = ref(db, `rooms/${roomId}/viewers`);
+  const itemRef = ref(db, `rooms/${roomId}/currentItem`);
+  const bidIncrementConfigRef = ref(db, `event_config/bid_increment`); // BIDINCREMENt CHANGE
 
-    // CHANGE: custom items live in DB per-room
-    const customItemsRef = ref(db, `rooms/${roomId}/customItems`);
-    const unsubChat = onValue(chatRef, (snapshot) => { //EFF CHANGE
-      const data = snapshot.val();
-      if (data) setMessages(Object.values(data));
-    });
+  // CHANGE: custom items live in DB per-room
+  const customItemsRef = ref(db, `rooms/${roomId}/customItems`);
+  const unsubChat = onValue(chatRef, (snapshot) => { //EFF CHANGE
+    const data = snapshot.val();
+    if (data) setMessages(Object.values(data));
+  });
 
-    const unsubPinned = onValue(pinnedRef, (snapshot) => {
-  const data = snapshot.val();
-  setPinnedMessage(data || null);
-});
+  const unsubPinned = onValue(pinnedRef, (snapshot) => {
+    const data = snapshot.val();
+    setPinnedMessage(data || null);
+  });
 
-    const unsubAuction = onValue(auctionRef, (snapshot) => {
+  const unsubAuction = onValue(auctionRef, (snapshot) => {
     const data = snapshot.val();
     if (data) {
       setIsAuctionActive(data.isActive);
@@ -114,98 +118,112 @@ const currentAuctionItemRef = useRef(null); // change here
       currentAuctionIdRef.current = data.id || null;
       currentAuctionItemRef.current = data.itemSnapshot || null;
     } else {
-    currentAuctionIdRef.current = null; // change here
-    currentAuctionItemRef.current = null; // change here
-  }
-});
+      currentAuctionIdRef.current = null; // change here
+      currentAuctionItemRef.current = null; // change here
+    }
+  });
 
-    const unsubBid = onValue(bidRef, (snapshot) => {
-      const price = snapshot.val() || 0;
-      setCurrentBid(price);
-      currentBidRef.current = price;
-      setCustomBid((prev) => {
-        const minNextBid = price + 10;
-        if (!isAuctionActiveRef.current) return minNextBid;
-        return prev < minNextBid ? minNextBid : prev;
-      });
+  const unsubBid = onValue(bidRef, (snapshot) => {
+    const price = snapshot.val() || 0;
+    setCurrentBid(price);
+    currentBidRef.current = price;
+    setCustomBid((prev) => {
+      const minNextBid = price + bidIncrementRef.current; // BIDINCREMENt CHANGE
+      if (!isAuctionActiveRef.current) return minNextBid;
+      return prev < minNextBid ? minNextBid : prev;
     });
+  });
 
-    const unsubViewers = onValue(viewersRef, (snapshot) => {
-      setViewerCount(snapshot.size);
+  const unsubBidIncrement = onValue(bidIncrementConfigRef, (snapshot) => { // BIDINCREMENt CHANGE
+    const raw = Number(snapshot.val()); // BIDINCREMENt CHANGE
+    const nextIncrement = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 10; // BIDINCREMENt CHANGE
+    bidIncrementRef.current = nextIncrement; // BIDINCREMENt CHANGE
+    setBidIncrement(nextIncrement); // BIDINCREMENt CHANGE
+
+    setCustomBid((prev) => { // BIDINCREMENt CHANGE
+      const minNextBid = currentBidRef.current + nextIncrement; // BIDINCREMENt CHANGE
+      if (!isAuctionActiveRef.current) return minNextBid; // BIDINCREMENt CHANGE
+      return prev < minNextBid ? minNextBid : prev; // BIDINCREMENt CHANGE
     });
+  });
 
-    const unsubItem = onValue(itemRef, (snapshot) => {
-      const raw = snapshot.val();
+  const unsubViewers = onValue(viewersRef, (snapshot) => {
+    setViewerCount(snapshot.size);
+  });
 
-      if (!raw) {
-        setSelectedItem(null);
-        currentItemRef.current = null;
-        return;
-      }
+  const unsubItem = onValue(itemRef, (snapshot) => {
+    const raw = snapshot.val();
 
-      // CHANGE: backwards compatible — old schema stored just a numeric item id
-      if (typeof raw === "number") {
-        const item = INVENTORY.find((i) => i.id === raw);
-        const normalized = item
-          ? {
-              kind: "static",
-              id: item.id,
-              name: item.name,
-              desc: item.desc || "",
-              startPrice: Number(item.startPrice) || 0,
-            }
-          : { kind: "static", id: raw, name: `Item #${raw}`, desc: "", startPrice: 0 };
+    if (!raw) {
+      setSelectedItem(null);
+      currentItemRef.current = null;
+      return;
+    }
 
-        setSelectedItem(normalized);
-        currentItemRef.current = normalized;
-        return;
-      }
-
-      // CHANGE: new schema stores full snapshot object
-      const normalized = {
-        kind: raw.kind === "custom" ? "custom" : "static",
-        id: raw.id,
-        name: typeof raw.name === "string" ? raw.name : "Unknown Item",
-        desc: typeof raw.desc === "string" ? raw.desc : "",
-        startPrice: Number(raw.startPrice) || 0,
-      };
+    // CHANGE: backwards compatible — old schema stored just a numeric item id
+    if (typeof raw === "number") {
+      const item = INVENTORY.find((i) => i.id === raw);
+      const normalized = item
+        ? {
+            kind: "static",
+            id: item.id,
+            name: item.name,
+            desc: item.desc || "",
+            startPrice: Number(item.startPrice) || 0,
+          }
+        : { kind: "static", id: raw, name: `Item #${raw}`, desc: "", startPrice: 0 };
 
       setSelectedItem(normalized);
       currentItemRef.current = normalized;
-    });
+      return;
+    }
 
-    // CHANGE: load custom items from DB
-    const unsubCustomItems = onValue(customItemsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        setCustomItems([]);
-        return;
-      }
-
-      const items = Object.entries(data).map(([id, val]) => ({
-        kind: "custom",
-        id,
-        name: typeof val?.name === "string" ? val.name : "Custom Item",
-        desc: typeof val?.desc === "string" ? val.desc : "",
-        startPrice: Number(val?.startPrice) || 0,
-        createdAt: Number(val?.createdAt) || 0,
-      }));
-
-      items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setCustomItems(items);
-    });
-
-    return () => {
-      unsubChat();
-      unsubPinned();
-      unsubBid();
-      unsubAuction();
-      unsubViewers();
-      unsubItem();
-      unsubCustomItems();
+    // CHANGE: new schema stores full snapshot object
+    const normalized = {
+      kind: raw.kind === "custom" ? "custom" : "static",
+      id: raw.id,
+      name: typeof raw.name === "string" ? raw.name : "Unknown Item",
+      desc: typeof raw.desc === "string" ? raw.desc : "",
+      startPrice: Number(raw.startPrice) || 0,
     };
 
-  }, [roomId]);
+    setSelectedItem(normalized);
+    currentItemRef.current = normalized;
+  });
+
+  // CHANGE: load custom items from DB
+  const unsubCustomItems = onValue(customItemsRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) {
+      setCustomItems([]);
+      return;
+    }
+
+    const items = Object.entries(data).map(([id, val]) => ({
+      kind: "custom",
+      id,
+      name: typeof val?.name === "string" ? val.name : "Custom Item",
+      desc: typeof val?.desc === "string" ? val.desc : "",
+      startPrice: Number(val?.startPrice) || 0,
+      createdAt: Number(val?.createdAt) || 0,
+    }));
+
+    items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    setCustomItems(items);
+  });
+
+  return () => {
+    unsubChat();
+    unsubPinned();
+    unsubBid();
+    unsubBidIncrement(); // BIDINCREMENt CHANGE
+    unsubAuction();
+    unsubViewers();
+    unsubItem();
+    unsubCustomItems();
+  };
+}, [roomId]);
+
 
   // --- SYNC USERNAME ---
   useEffect(() => {
@@ -473,46 +491,45 @@ const unpinMessage = () => {
 
   // FIXED: Combined Vibration + Sound inside one function
   const triggerHaptic = () => {
-    // 1. Stronger Vibration (Android)
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(25); 
-    }
+  // 1. Stronger Vibration (Android)
+  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(25); 
+  }
 
-    // 2. "Tick" Sound (iPhone / Desktop)
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (AudioContext) {
-        try {
-            const ctx = new AudioContext();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
+  // 2. "Tick" Sound (iPhone / Desktop)
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (AudioContext) {
+      try {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
 
-            osc.connect(gain);
-            gain.connect(ctx.destination);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
 
-            // Sound Profile: High pitch (800Hz), very short (0.03s)
-            osc.frequency.setValueAtTime(800, ctx.currentTime);
-            gain.gain.setValueAtTime(0.025, ctx.currentTime); // Low volume (5%)
-            
-            osc.start();
-            osc.stop(ctx.currentTime + 0.03);
-        } catch (e) {
-            // Ignore audio errors
-        }
-    }
-  };
-
-  const handleIncrease = () => {
-      triggerHaptic(); // <--- Add this
-      setCustomBid(prev => prev + 10);
-  };
-
- const handleDecrease = () => {
-      if (customBid > currentBid + 10) {
-          triggerHaptic(); // <--- Add this
-          setCustomBid(prev => prev - 10);
+          // Sound Profile: High pitch (800Hz), very short (0.03s)
+          osc.frequency.setValueAtTime(800, ctx.currentTime);
+          gain.gain.setValueAtTime(0.025, ctx.currentTime); // Low volume (5%)
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.03);
+      } catch (e) {
+          // Ignore audio errors
       }
-  };
+  }
+};
 
+const handleIncrease = () => {
+    triggerHaptic(); // <--- Add this
+    setCustomBid(prev => prev + bidIncrement); // BIDINCREMENt CHANGE
+};
+
+const handleDecrease = () => {
+    if (customBid > currentBid + bidIncrement) { // BIDINCREMENt CHANGE
+        triggerHaptic(); // <--- Add this
+        setCustomBid(prev => prev - bidIncrement); // BIDINCREMENt CHANGE
+    }
+};
 
 const getPhoneFromUserId = (userId) => {
   if (!userId) return "N/A";
@@ -520,74 +537,71 @@ const getPhoneFromUserId = (userId) => {
   return match ? match[1] : "N/A";
 };
 
-  const placeBid = () => {
-    if (!isAuctionActive) return; 
-     triggerHaptic();
-    // 1. Check restriction
-    if (restrictions.isBidBanned) {
-        alert("You are banned from bidding.");
-        return;
-    }
-    const bidRef = ref(db, `rooms/${roomId}/bid`);
-    const lastBidderRef = ref(db, `rooms/${roomId}/lastBidder`);
-    
-    runTransaction(bidRef, (current) => {
-      const safeCurrent = current || 0;
-      if (customBid > safeCurrent) return customBid;
-      return;
-    }).then((result) => {
-        if (result.committed) {
-            set(lastBidderRef, username);
-            
-            const phone = getPhoneFromUserId(persistentUserId);
-            // 2. NEW: Log bid for Moderator History
-           const auctionId = currentAuctionIdRef.current;
-            if (!auctionId) return;
+const placeBid = () => {
+  if (!isAuctionActive) return;
+  triggerHaptic();
 
-            push(ref(db, `rooms/${roomId}/auctionBids/${auctionId}`), {
-              user: username,
-              phone,
-              amount: customBid,
-              timestamp: Date.now()
-            });
-            // --- CHANGE 2: OVERTIME LOGIC ---
-            // If bid is placed in the last 10 seconds, add random 0-5 seconds
-            const now = Date.now();
-            const timeRemaining = endTime - now;
-            
-            if (timeRemaining <= 10000 && timeRemaining > 0) {
-                 // Random integer between 0 and 5
-                 const randomSeconds = Math.floor(Math.random() * 6); 
-                 
-                 if (randomSeconds > 0) {
-                     const bonusTime = randomSeconds * 1000;
-                     update(ref(db, `rooms/${roomId}/auction`), {
-                         endTime: endTime + bonusTime
-                     });
-                     
-                     // Log/Chat about the extension (Helps users understand why time jumped)
-                        push(ref(db, `rooms/${roomId}/chat`), {
-                        text: `⚡ Overtime! +${randomSeconds}s added`,
-                        type: 'auction'
-                     }); 
-                 }
-            }
-        }
+  // 1. Check restriction
+  if (restrictions.isBidBanned) {
+    alert("You are banned from bidding.");
+    return;
+  }
+
+  const bidRef = ref(db, `rooms/${roomId}/bid`);
+  const lastBidderRef = ref(db, `rooms/${roomId}/lastBidder`);
+
+  runTransaction(bidRef, (current) => {
+    const safeCurrent = current || 0;
+    const minAllowed = safeCurrent + bidIncrementRef.current; // BIDINCREMENt CHANGE
+    if (customBid >= minAllowed) return customBid; // BIDINCREMENt CHANGE
+    return;
+  }).then((result) => {
+    if (!result.committed) return;
+
+    set(lastBidderRef, username);
+
+    const phone = getPhoneFromUserId(persistentUserId);
+    const auctionId = currentAuctionIdRef.current;
+    if (!auctionId) return;
+
+    push(ref(db, `rooms/${roomId}/auctionBids/${auctionId}`), {
+      user: username,
+      phone,
+      amount: customBid,
+      timestamp: Date.now()
     });
+
+    // If bid is placed in the last 10 seconds, add random 0-5 seconds
+    const now = Date.now();
+    const timeRemaining = endTime - now;
+
+    if (timeRemaining <= 10000 && timeRemaining > 0) {
+      const randomSeconds = Math.floor(Math.random() * 6);
+      if (randomSeconds > 0) {
+        const bonusTime = randomSeconds * 1000;
+        update(ref(db, `rooms/${roomId}/auction`), {
+          endTime: endTime + bonusTime
+        });
+
+        push(ref(db, `rooms/${roomId}/chat`), {
+          text: `Overtime! +${randomSeconds}s added`,
+          type: 'auction'
+        });
+      }
+    }
 
     push(ref(db, `rooms/${roomId}/chat`), {
-        text: `${username} bid ₹${customBid}`,
-        type: 'bid'
+      text: `${username} bid INR ${customBid}`,
+      type: 'bid'
     });
 
-    logEvent(roomId, 'BID_PLACED', { 
-                user: username, 
-                amount: customBid, 
-                item: currentItemRef.current ? currentItemRef.current.name : 'Unknown'
-
-            });
-  };
-
+    logEvent(roomId, 'BID_PLACED', {
+      user: username,
+      amount: customBid,
+      item: currentItemRef.current ? currentItemRef.current.name : 'Unknown'
+    });
+  });
+};
   const startAuction = () => {
     // CHANGE: require selected snapshot (works for static/custom)
     if (!currentItemRef.current) {
@@ -692,41 +706,41 @@ const getPhoneFromUserId = (userId) => {
       <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
           <div className={`${glassSurface} ${glassHighlight} p-2 min-w-fit px-4 flex flex-col items-end transition-colors ${isAuctionActive ? 'bg-red-600/45 border-[#FF6600]' : ''}`}>
-          <span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-white' : 'text-[#FF6600]'}`}>
-            {isAuctionActive ? "Current Bid" : "Starting Price"}
-          </span>
-              {/* --- CHANGE 1: RESTORED HOST PRICE CONTROLS --- */}
-              <div className="flex items-center justify-end gap-1 w-full">
-                  
-                  {/* A. Manual Step Buttons (Host Only, Inactive Auction) */}
-                  {isHost && !isAuctionActive && (
-                      <div className="flex flex-col gap-0.5 mr-2">
-                           <button onClick={() => manualStep(10)} className="text-white hover:text-[#FF6600] transition-colors">
-                               <ChevronUp className="w-3 h-3" />
-                           </button>
-                           <button onClick={() => manualStep(-10)} className="text-white hover:text-[#FF6600] transition-colors">
-                               <ChevronDown className="w-3 h-3" />
-                           </button>
-                      </div>
-                  )}
+<span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-white' : 'text-[#FF6600]'}`}>
+  {isAuctionActive ? "Current Bid" : "Starting Price"}
+</span>
+    {/* --- CHANGE 1: RESTORED HOST PRICE CONTROLS --- */}
+    <div className="flex items-center justify-end gap-1 w-full">
+        
+        {/* A. Manual Step Buttons (Host Only, Inactive Auction) */}
+        {isHost && !isAuctionActive && (
+            <div className="flex flex-col gap-0.5 mr-2">
+                 <button onClick={() => manualStep(bidIncrement)} className="text-white hover:text-[#FF6600] transition-colors"> {/* BIDINCREMENt CHANGE */}
+                     <ChevronUp className="w-3 h-3" />
+                 </button>
+                 <button onClick={() => manualStep(-bidIncrement)} className="text-white hover:text-[#FF6600] transition-colors"> {/* BIDINCREMENt CHANGE */}
+                     <ChevronDown className="w-3 h-3" />
+                 </button>
+            </div>
+        )}
 
-                  {/* B. Editable Price Input */}
-                  <div className="flex items-center justify-end gap-1 flex-1">
-                      <span className="text-xl font-bold text-[#FF6600]">₹</span>
-                      {isHost ? (
-                        <input 
-                            type="number"
-                            value={currentBid === 0 ? '' : currentBid}
-                            onChange={handlePriceChange}
-                            disabled={isAuctionActive}
-                            step="10"
-                            placeholder="0"
-                            style={{ width: `${Math.max(2, (currentBid?.toString() || "").length + 1)}ch` }}
-                            className={`
-                                bg-transparent text-right font-display font-black text-4xl outline-none p-0 m-0 placeholder:text-white/20 pointer-events-auto relative z-[70]
-                                ${isAuctionActive ? 'text-white' : 'text-white border-b border-dashed border-white/20'}
-                            `}
-                        />
+        {/* B. Editable Price Input */}
+        <div className="flex items-center justify-end gap-1 flex-1">
+            <span className="text-xl font-bold text-[#FF6600]">{"\u20B9"}</span>
+            {isHost ? (
+              <input 
+                  type="number"
+                  value={currentBid === 0 ? '' : currentBid}
+                  onChange={handlePriceChange}
+                  disabled={isAuctionActive}
+                  step={bidIncrement} // BIDINCREMENt CHANGE
+                  placeholder="0"
+                  style={{ width: `${Math.max(2, (currentBid?.toString() || "").length + 1)}ch` }}
+                  className={`
+                      bg-transparent text-right font-display font-black text-4xl outline-none p-0 m-0 placeholder:text-white/20 pointer-events-auto relative z-[70]
+                      ${isAuctionActive ? 'text-white' : 'text-white border-b border-dashed border-white/20'}
+                  `}
+              />
                       ) : (
                         <span className="text-4xl font-display font-black text-white tabular-nums tracking-tighter">
                             {currentBid}
@@ -1078,20 +1092,20 @@ const getPhoneFromUserId = (userId) => {
 
                 {/* Viewer Bidding Buttons */}
                 {!isHost && (
-                    <div className={`flex flex-col items-center gap-2 transition-all duration-300 ${isAuctionActive ? 'opacity-100' : 'opacity-100'}`}>
-                        <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
-                            <div className="flex items-center justify-between px-2 py-2">
-                                <button 
-                                    onClick={handleDecrease} 
-                                    disabled={!isAuctionActive || customBid <= currentBid + 10}
-                                    className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + 10) ? 'cursor-not-allowed' : ''}`}
-                                >
-                                    <Minus className="w-8 h-8" />
-                                </button>
+                <div className={`flex flex-col items-center gap-2 transition-all duration-300 ${isAuctionActive ? 'opacity-100' : 'opacity-100'}`}>
+                    <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
+                        <div className="flex items-center justify-between px-2 py-2">
+                            <button 
+                                onClick={handleDecrease} 
+                                disabled={!isAuctionActive || customBid <= currentBid + bidIncrement} // BIDINCREMENt CHANGE
+                                className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + bidIncrement) ? 'cursor-not-allowed' : ''}`} // BIDINCREMENt CHANGE
+                            >
+                                <Minus className="w-8 h-8" />
+                            </button>
 
-                                <button 
-                                    onClick={handleIncrease} 
-                                    disabled={!isAuctionActive}
+                            <button 
+                                onClick={handleIncrease} 
+                                disabled={!isAuctionActive}
                                     className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!isAuctionActive ? 'cursor-not-allowed' : ''}`}
                                 >
                                     <Plus className="w-8 h-8" />
@@ -1110,7 +1124,7 @@ const getPhoneFromUserId = (userId) => {
                                     }
                                 `}
                             >
-                                <span>₹{customBid}</span>
+                                <span>{"\u20B9"}{customBid}</span>
                             </button>
                         </div>
                     </div>
