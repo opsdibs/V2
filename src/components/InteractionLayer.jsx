@@ -81,7 +81,7 @@ const currentAuctionItemRef = useRef(null); // change here
   const stopTriggeredRef = useRef(false);
 
   // For enforcing bans/kicks
-  const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false });
+  const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false, isKicked: false }); // changes
   const searchParams = new URLSearchParams(window.location.search);
   const persistentDbKey = searchParams.get('dbKey');
   const persistentUserId = searchParams.get('uid');
@@ -338,14 +338,17 @@ const currentAuctionItemRef = useRef(null); // change here
       
       const restrictionsRef = ref(db, `audience_data/${roomId}/${persistentDbKey}/restrictions`);
       const unsub = onValue(restrictionsRef, (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-              setRestrictions(data);
-              // Immediate Kick Action
-              if (data.isKicked) {
-                  alert("You have been kicked by the moderator.");
-                  window.location.href = '/'; 
-              }
+          const data = snapshot.val() || {}; // changes
+          const nextRestrictions = { // changes: always keep full shape
+              isMuted: !!data.isMuted,
+              isBidBanned: !!data.isBidBanned,
+              isKicked: !!data.isKicked,
+          };
+          setRestrictions(nextRestrictions);
+          // Immediate Kick Action
+          if (nextRestrictions.isKicked) {
+              alert("You have been kicked by the moderator.");
+              window.location.href = '/'; 
           }
       });
       return () => unsub();

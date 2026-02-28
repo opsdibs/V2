@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ref, onValue, update, remove } from 'firebase/database';
+import { ref, onValue, update } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { Shield, MessageSquareOff, Ban, Gavel, XCircle, History, X, UserX, UserCheck } from 'lucide-react'; // CHANGE HERE
 
@@ -11,12 +11,51 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [onlineIds, setOnlineIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [onlineData, setOnlineData] = useState({});
+  const [sessionsByUser, setSessionsByUser] = useState({}); // changes: keep all sessions so moderation targets the right user
   const [hostUser, setHostUser] = useState(null); // NEW: latest host session 
   const [hostChatMuted, setHostChatMutedState] = useState(false); // CHANGE HERE: drive active UI state
   const [hostBanned, setHostBannedState] = useState(false);       // CHANGE HERE: drive active UI state
 
   const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
+
+  // changes: fetch session records, grouped by userId
+  useEffect(() => {
+    const sessionsRef = ref(db, `audience_data/${roomId}`);
+    return onValue(sessionsRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const grouped = {};
+
+      Object.entries(data).forEach(([sessionKey, val]) => {
+        const userId = val?.userId;
+        if (!userId) return;
+
+        if (!grouped[userId]) grouped[userId] = [];
+        grouped[userId].push({
+          sessionKey,
+          joinedAt: Number(val?.joinedAt) || 0,
+          role: val?.role || "",
+          restrictions: {
+            isMuted: !!val?.restrictions?.isMuted,
+            isBidBanned: !!val?.restrictions?.isBidBanned,
+            isKicked: !!val?.restrictions?.isKicked,
+          },
+        });
+      });
+
+      Object.values(grouped).forEach((list) =>
+        list.sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
+      );
+
+      setSessionsByUser(grouped);
+    });
+  }, [roomId]);
+
+  const getTargetSessionKeys = (user) => { // changes: apply moderation to all known sessions for a user
+    const indexed = user?.lastSessionKey || user?.dbKey;
+    const tracked = user?.sessionKeys || (sessionsByUser[user?.userId] || []).map((s) => s.sessionKey);
+    return [...new Set([indexed, ...(tracked || [])].filter(Boolean))];
+  };
 
   // 1. Fetch & Process Audience List
   useEffect(() => {
@@ -30,18 +69,26 @@ return onValue(usersRef, (snapshot) => { //EFF CHANGE
     ...val
   }));
 
-  const latestHost =
+  const latestHostFromIndex =
     rawList
       .filter(u => u.role === 'host')
       .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0] || null;
-  setHostUser(latestHost);
+  const hostSessions = latestHostFromIndex ? (sessionsByUser[latestHostFromIndex.userId] || []) : [];
+  const hostDbKey = latestHostFromIndex?.lastSessionKey || latestHostFromIndex?.dbKey || hostSessions[0]?.sessionKey || null;
+  setHostUser(latestHostFromIndex ? { ...latestHostFromIndex, dbKey: hostDbKey } : null);
 
   const processed = rawList
     .filter(u => u.role !== 'host' && u.role !== 'moderator')
     .map(user => {
+      const userSessions = sessionsByUser[user.userId] || [];
+      const resolvedSessionKey = user.lastSessionKey || user.dbKey || userSessions[0]?.sessionKey || null;
+      const activeSession = userSessions.find((s) => s.sessionKey === resolvedSessionKey) || userSessions[0];
       const presence = onlineData[user.userId];
       return {
         ...user,
+        dbKey: resolvedSessionKey,
+        sessionKeys: userSessions.map((s) => s.sessionKey),
+        restrictions: activeSession?.restrictions || { isMuted: false, isBidBanned: false, isKicked: false }, // changes: real restriction state
         isOnline: !!presence,
         presenceState: presence ? presence.state : 'offline'
       };
@@ -55,7 +102,7 @@ return onValue(usersRef, (snapshot) => { //EFF CHANGE
 });
     
     
-  }, [roomId, onlineData]); // Added onlineIds as dependency to re-sort when presence changes
+  }, [roomId, onlineData, sessionsByUser]); // Added onlineIds as dependency to re-sort when presence changes
 
   // 2. Fetch Auction History
   useEffect(() => {
@@ -94,40 +141,56 @@ useEffect(() => {
 }, [roomId]);
 
       // --- ACTIONS ---
-    const toggleRestriction = (user, type) => {
-      const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
+    const toggleRestriction = async (user, type) => {
+      const sessionKeys = getTargetSessionKeys(user); // changes
+      if (sessionKeys.length === 0) return; // changes
+      const nextValue = !Boolean(user.restrictions?.[type]); // changes
       const updates = {};
-      updates[`audience_data/${roomId}/${sessionKey}/restrictions/${type}`] = !user.restrictions?.[type];
-      update(ref(db), updates);
+      sessionKeys.forEach((sessionKey) => {
+        updates[`audience_data/${roomId}/${sessionKey}/restrictions/${type}`] = nextValue;
+      });
+      await update(ref(db), updates);
     };
 
-    const kickUser = (user) => {
-      const sessionKey = user.lastSessionKey || user.dbKey; //EFF CHANGE
+    const kickUser = async (user) => {
+      const sessionKeys = getTargetSessionKeys(user); // changes
+      if (sessionKeys.length === 0) return; // changes
       if (!window.confirm(`Kick ${user.userId}?`)) return;
       const updates = {};
-      updates[`audience_data/${roomId}/${sessionKey}/restrictions/isKicked`] = true;
-      update(ref(db), updates);
+      sessionKeys.forEach((sessionKey) => {
+        updates[`audience_data/${roomId}/${sessionKey}/restrictions/isKicked`] = true;
+      });
+      updates[`rooms/${roomId}/viewers/${user.userId}`] = null; // changes: immediately remove presence
+      await update(ref(db), updates);
     };
 
   // CHANGE HERE: moderator mutes/unmutes host chat
   const setHostChatMuted = async (enabled) => {
+    const hostSessionKeys = hostUser ? getTargetSessionKeys(hostUser) : []; // changes
+    const restrictionUpdates = {};
+    hostSessionKeys.forEach((sessionKey) => {
+      restrictionUpdates[`audience_data/${roomId}/${sessionKey}/restrictions/isMuted`] = enabled;
+    });
+
     await update(ref(db), {
       [`rooms/${roomId}/hostModeration/chatMuted`]: enabled,
-      ...(hostUser?.dbKey
-        ? { [`audience_data/${roomId}/${hostUser.dbKey}/restrictions/isMuted`]: enabled }
-        : {}),
+      ...restrictionUpdates,
     });
   };
 
   // CHANGE HERE: moderator kicks host (end stream + force host to go home via LiveRoom listener)
   const kickHostNow = async () => {
     const now = Date.now();
+    const hostSessionKeys = hostUser ? getTargetSessionKeys(hostUser) : []; // changes
+    const restrictionUpdates = {};
+    hostSessionKeys.forEach((sessionKey) => {
+      restrictionUpdates[`audience_data/${roomId}/${sessionKey}/restrictions/isKicked`] = true;
+    });
+
     await update(ref(db), {
       [`rooms/${roomId}/hostModeration/kickNow`]: now,
       [`rooms/${roomId}/isLive`]: false,
-      ...(hostUser?.dbKey
-        ? { [`audience_data/${roomId}/${hostUser.dbKey}/restrictions/isKicked`]: true }
-        : {}),
+      ...restrictionUpdates,
     });
   };
 
@@ -271,7 +334,7 @@ useEffect(() => {
                 
                 return (
                     <div 
-                        key={user.dbKey} 
+                        key={user.userId} 
                         className={`
                             flex items-center justify-between p-3 rounded-xl border transition-all mb-2 group
                             ${isOnline 
