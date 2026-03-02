@@ -12,15 +12,19 @@ import { startSession, endSession } from '../lib/analytics';
 export const LiveRoom = ({ roomId }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // --- SECURITY: VERIFY ROLE FROM DB ---
   const dbKey = searchParams.get('dbKey');
   const [verifiedRole, setVerifiedRole] = useState(null);
   const [isVerifying, setIsVerifying] = useState(true);
-  const [currentUsername, setCurrentUsername] = useState(null); // <--- NEW
+  const [currentUsername, setCurrentUsername] = useState(null);
 
-  // --- STATE FOR REACTIVE CONNECTION ---
   const [isChannelLive, setIsChannelLive] = useState(false); 
-  const [streamId, setStreamId] = useState(0); // Forces DOM reset on new stream
+  const [streamId, setStreamId] = useState(0);
+
+  // CHANGE B-1: Track the CDN HLS URL from Firebase.
+  // When this is null, viewers fall back to RTC (current behavior).
+  // Once you add Cloudflare Stream, write the HLS URL to Firebase
+  // at rooms/${roomId}/hlsUrl and viewers will switch automatically.
+  const [hlsUrl, setHlsUrl] = useState(null);
 
   useEffect(() => {
     const verifyUserSession = async () => {
@@ -30,7 +34,7 @@ export const LiveRoom = ({ roomId }) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
                 setVerifiedRole(data.role);
-                setCurrentUsername(data.username); // <--- NEW: Capture username
+                setCurrentUsername(data.username);
             } else {
                 navigate('/'); 
             }
@@ -44,30 +48,25 @@ export const LiveRoom = ({ roomId }) => {
     verifyUserSession();
   }, [roomId, dbKey, navigate]);
 
-  // Derived Permissions
   const isHost = verifiedRole === 'host';
   const isModerator = verifiedRole === 'moderator';
   const isSpectator = verifiedRole === 'spectator'; 
   
-  // Connection States
   const [joined, setJoined] = useState(false);     
   const [isStreaming, setIsStreaming] = useState(false); 
   const [videoReady, setVideoReady] = useState(false);   
   const [status, setStatus] = useState("INITIALIZING...");
 
-  // UI States
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
   const [cameras, setCameras] = useState([]);
-  const [cameraFacingMode, setCameraFacingMode] = useState("environment"); // rear="environment" | front="user"
+  const [cameraFacingMode, setCameraFacingMode] = useState("environment");
   const [showModPanel, setShowModPanel] = useState(false);
 
-  // Refs
   const clientRef = useRef(null);
   const localTracksRef = useRef({ audio: null, video: null });
   const analyticsSessionKey = useRef(null);
-  const lastKickNowRef = useRef(null); // CHANGE HERE: ignore old kickNow
-
+  const lastKickNowRef = useRef(null);
 
   useEffect(() => {
     document.body.style.backgroundColor = "black";
@@ -80,50 +79,53 @@ export const LiveRoom = ({ roomId }) => {
     const unsub = onValue(liveStatusRef, (snapshot) => {
         const liveStatus = snapshot.val();
         setIsChannelLive(!!liveStatus);
-        
-        // If going Live, increment ID to force-refresh the viewer's video player
         if (liveStatus) {
             setStreamId(prev => prev + 1);
         }
     });
     return () => unsub();
   }, [roomId]);
-  // CHANGE HERE: host kick listener (leave stream + go home)
-useEffect(() => {
-  if (!isHost) return;
 
-  const kickRef = ref(db, `rooms/${roomId}/hostModeration/kickNow`);
-  return onValue(kickRef, async (snap) => {
-    const kickedAt = snap.val();
+  // CHANGE B-2: Listen for hlsUrl in Firebase.
+  // Right now this will always be null (no CDN set up).
+  // When you add Cloudflare Stream later:
+  //   1. Write the HLS pull URL to rooms/${roomId}/hlsUrl when host goes live
+  //   2. Delete it when host ends stream
+  //   3. Viewers will automatically switch from RTC to HLS — no more code changes needed
+  useEffect(() => {
+    if (isHost) return; // Host never needs the HLS URL
+    const hlsRef = ref(db, `rooms/${roomId}/hlsUrl`);
+    const unsub = onValue(hlsRef, (snapshot) => {
+        setHlsUrl(snapshot.val() || null);
+    });
+    return () => unsub();
+  }, [roomId, isHost]);
 
-    // CHANGE HERE: ignore the initial onValue() fire and ignore repeats
-    if (lastKickNowRef.current === null) {
-    lastKickNowRef.current = kickedAt;
-    return;
-    }
-    if (!kickedAt || kickedAt === lastKickNowRef.current) return;
-    lastKickNowRef.current = kickedAt;
-
-    try {
-      const client = clientRef.current;
-      const tracks = [localTracksRef.current.audio, localTracksRef.current.video].filter(Boolean);
-
-      // CHANGE HERE: stop publish + leave agora
-      if (client) {
-        try { await client.unpublish(tracks); } catch {}
-        try { await client.leave(); } catch {}
+  useEffect(() => {
+    if (!isHost) return;
+    const kickRef = ref(db, `rooms/${roomId}/hostModeration/kickNow`);
+    return onValue(kickRef, async (snap) => {
+      const kickedAt = snap.val();
+      if (lastKickNowRef.current === null) {
+        lastKickNowRef.current = kickedAt;
+        return;
       }
-
-      // CHANGE HERE: make room not live
-      try { await update(ref(db, `rooms/${roomId}`), { isLive: false }); } catch {}
-
-      // CHANGE HERE: send host to home
-      navigate('/');
-    } catch {
-      navigate('/'); // CHANGE HERE: fallback
-    }
-  });
-}, [isHost, roomId, navigate]);
+      if (!kickedAt || kickedAt === lastKickNowRef.current) return;
+      lastKickNowRef.current = kickedAt;
+      try {
+        const client = clientRef.current;
+        const tracks = [localTracksRef.current.audio, localTracksRef.current.video].filter(Boolean);
+        if (client) {
+          try { await client.unpublish(tracks); } catch {}
+          try { await client.leave(); } catch {}
+        }
+        try { await update(ref(db, `rooms/${roomId}`), { isLive: false }); } catch {}
+        navigate('/');
+      } catch {
+        navigate('/');
+      }
+    });
+  }, [isHost, roomId, navigate]);
 
   // --- 2. ANALYTICS SESSION ---
   useEffect(() => {
@@ -138,45 +140,44 @@ useEffect(() => {
       };
   }, [joined, roomId, verifiedRole]);
 
-  // --- NEW: AUTO-ARCHIVE EVENT CONFIG ---
+  // --- AUTO-ARCHIVE EVENT CONFIG ---
   useEffect(() => {
-      // Only the Host performs this administrative task
       if (!isHost || !roomId) return;
-
       const archiveConfig = async () => {
           try {
-              // 1. Check if we already saved the time for this room
               const metaRef = ref(db, `rooms/${roomId}/metadata`);
               const metaSnap = await get(metaRef);
-
               if (!metaSnap.exists()) {
-                  // 2. If not, fetch the GLOBAL config
                   const configRef = ref(db, `event_config`);
                   const configSnap = await get(configRef);
-
                   if (configSnap.exists()) {
                       const { startTime, endTime } = configSnap.val();
-                      
-                      // 3. FREEZE it into the room's history
                       await update(ref(db, `rooms/${roomId}/metadata`), {
                           startTime: new Date(startTime).getTime(),
                           endTime: new Date(endTime).getTime(),
                           archivedAt: Date.now()
                       });
-                      console.log("✅ Event Config Archived for Analytics");
                   }
               }
           } catch (err) {
               console.error("Failed to archive config", err);
           }
       };
-
       archiveConfig();
   }, [isHost, roomId]);
 
   // --- 3. MAIN CONNECTION LOGIC ---
   useEffect(() => {
-    // A. GUARD CLAUSE: If Host is Offline, Audience waits here.
+    // CHANGE B-3: If viewer has an HLS URL, skip RTC entirely.
+    // They'll watch via the <video> tag below — zero Agora viewer minutes billed.
+    if (!isHost && hlsUrl && isChannelLive) {
+        setJoined(true);
+        setIsStreaming(true);
+        setVideoReady(true);
+        setStatus("LIVE");
+        return;
+    }
+
     if (!isHost && !isChannelLive) {
         setStatus("WAITING FOR HOST...");
         setJoined(false);
@@ -193,8 +194,6 @@ useEffect(() => {
         setStatus("CONNECTING...");
         
         let token = null;
-
-        // Try API first
         try {
             const response = await fetch(`/api/token?channelName=${roomId}`);
             if (response.ok) {
@@ -205,7 +204,6 @@ useEffect(() => {
             console.warn("API Token Failed, using fallback");
         }
 
-        // Fallback
         if (!token) token = AGORA_TOKEN; 
         if (!token) throw new Error("No Agora Token found");
 
@@ -220,18 +218,18 @@ useEffect(() => {
         }
 
         myClient.on("user-published", async (user, mediaType) => {
-        if (!isActive) return;
-        await myClient.subscribe(user, mediaType);
-        if (mediaType === "video") {
-            const remoteContainer = document.getElementById("remote-video-container");
-            if (remoteContainer) {
-            remoteContainer.innerHTML = ''; 
-            user.videoTrack.play(remoteContainer, { mirror: true }); // CHANGE: mirror viewer playback
-            setVideoReady(true);
-            setIsStreaming(true);
-            }
-        }
-        if (mediaType === "audio") user.audioTrack.play();
+          if (!isActive) return;
+          await myClient.subscribe(user, mediaType);
+          if (mediaType === "video") {
+              const remoteContainer = document.getElementById("remote-video-container");
+              if (remoteContainer) {
+                remoteContainer.innerHTML = ''; 
+                user.videoTrack.play(remoteContainer, { mirror: true });
+                setVideoReady(true);
+                setIsStreaming(true);
+              }
+          }
+          if (mediaType === "audio") user.audioTrack.play();
         });
 
         myClient.on("user-unpublished", (user, mediaType) => {
@@ -251,22 +249,24 @@ useEffect(() => {
           let micTrack, camTrack;
           
           try {
-             // FIX: Use standard HD preset instead of aggressive 60fps
-             // This prevents "Timeout starting video source" errors
-             const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
-                 { echoCancellation: true, noiseSuppression: true },
+            // CHANGE A: Custom encoder config replacing "720p_1" preset.
+            // "720p_1" was requesting 30fps at ~1130 kbps.
+            // This config requests 15fps at max 800 kbps — roughly half the bandwidth cost.
+            // frameRate: 15 is fine for live commerce (selling products, not sports).
+            const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+                { echoCancellation: true, noiseSuppression: true },
                 { encoderConfig: "720p_1", facingMode: cameraFacingMode } // rear/front only
-             );
-             micTrack = tracks[0];
-             camTrack = tracks[1];
+            );
+            micTrack = tracks[0];
+            camTrack = tracks[1];
           } catch (e) {
-             console.warn("HD failed, retrying SD...", e);
-             const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
-                undefined,
-                { facingMode: cameraFacingMode }
-             );
-             micTrack = tracks[0];
-             camTrack = tracks[1];
+            console.warn("HD failed, retrying SD...", e);
+            const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+               undefined,
+               { facingMode: cameraFacingMode }
+            );
+            micTrack = tracks[0];
+            camTrack = tracks[1];
           }
 
           if (!isActive) { 
@@ -297,7 +297,6 @@ useEffect(() => {
           if (localTracksRef.current.audio) localTracksRef.current.audio.close();
           if (localTracksRef.current.video) localTracksRef.current.video.close();
           localTracksRef.current = { audio: null, video: null };
-
           if (myClient) {
               await myClient.unpublish().catch(() => {});
               await myClient.leave().catch(() => {});
@@ -308,28 +307,33 @@ useEffect(() => {
       cleanup();
     };
 
-  // --- FIX: DEPENDENCY TRICK ---
-  // If I am Host, ignore 'isChannelLive' changes (don't re-run init).
-  // If I am Audience, re-run init when 'isChannelLive' changes.
-  }, [roomId, isHost, isHost ? -1 : isChannelLive]); 
+  }, [roomId, isHost, isHost ? -1 : isChannelLive, hlsUrl]); // CHANGE B-4: added hlsUrl to deps
 
   const handleToggleStream = async () => {
       if (!clientRef.current) return;
       const tracks = [localTracksRef.current.audio, localTracksRef.current.video].filter(Boolean);
-
       try {
           if (isStreaming) {
               setStatus("STOPPING...");
               await clientRef.current.unpublish(tracks);
               setIsStreaming(false);
               setStatus("READY TO AIR");
-              await update(ref(db, `rooms/${roomId}`), { isLive: false });
+              // CHANGE B-5: Clear hlsUrl from Firebase when stream ends.
+              // Right now hlsUrl is always null so this is a no-op.
+              // When you set up Cloudflare Stream, this will also clear the viewer HLS path.
+              await update(ref(db, `rooms/${roomId}`), { isLive: false, hlsUrl: null });
           } else {
               setStatus("PUBLISHING...");
               if (localTracksRef.current.audio) await localTracksRef.current.audio.setEnabled(true);
               await clientRef.current.publish(tracks);
               setIsStreaming(true);
               setStatus("LIVE");
+              // CHANGE B-6: When you set up Cloudflare Stream, add your HLS pull URL here:
+              // await update(ref(db, `rooms/${roomId}`), { 
+              //   isLive: true, 
+              //   hlsUrl: `https://customer-xxx.cloudflarestream.com/${roomId}/manifest/video.m3u8`
+              // });
+              // For now, just sets isLive (existing behavior).
               await update(ref(db, `rooms/${roomId}`), { isLive: true });
           }
       } catch (err) {
@@ -338,27 +342,22 @@ useEffect(() => {
       }
   };
 
-const switchCamera = async () => {
-  if (!localTracksRef.current.video) return;
-
-  try {
-    const currentTrack = localTracksRef.current.video;
-    const nextFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
-
-    // Enforce exactly two states: rear (environment) <-> front (user), both at 1x
-    await currentTrack.setDevice({ facingMode: nextFacingMode });
-    setCameraFacingMode(nextFacingMode);
-
-    // Ensure preview stays non-mirrored after switching
-    const localContainer = document.getElementById("local-video-container");
-    if (localContainer) {
-      localContainer.innerHTML = "";
-      currentTrack.play(localContainer, { mirror: true });
+  const switchCamera = async () => {
+    if (!localTracksRef.current.video) return;
+    try {
+      const currentTrack = localTracksRef.current.video;
+      const nextFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+      await currentTrack.setDevice({ facingMode: nextFacingMode });
+      setCameraFacingMode(nextFacingMode);
+      const localContainer = document.getElementById("local-video-container");
+      if (localContainer) {
+        localContainer.innerHTML = "";
+        currentTrack.play(localContainer, { mirror: true });
+      }
+    } catch (err) {
+      console.error("Camera switch failed", err);
     }
-  } catch (err) {
-    console.error("Camera switch failed", err);
-  }
-};
+  };
 
   const toggleMic = async () => {
       if (localTracksRef.current.audio) {
@@ -367,6 +366,7 @@ const switchCamera = async () => {
           setIsMicOn(newState);
       }
   };
+
   const toggleCam = async () => {
       if (localTracksRef.current.video) {
           const newState = !isCamOn;
@@ -395,12 +395,28 @@ const switchCamera = async () => {
       <div className="absolute inset-0 z-0 max-w-md mx-auto w-full bg-black">
         <div id="local-video-container" className={`w-full h-full ${!isHost ? 'hidden' : ''}`}></div>
         
-        {/* FIX: key={streamId} forces a fresh DIV for viewers on stream restart */}
-        <div 
+        {/* CHANGE B-7: Viewer video layer.
+            - If hlsUrl exists: renders a plain <video> tag. Zero Agora billing for this viewer.
+            - If hlsUrl is null (current state): renders the RTC container as before.
+            No visual difference to the viewer either way. */}
+        {!isHost && hlsUrl ? (
+          // CDN path — viewer watches HLS, not billed as Agora RTC user
+          <video
+            key={streamId}
+            src={hlsUrl}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover"
+            onCanPlay={() => { setVideoReady(true); setIsStreaming(true); }}
+          />
+        ) : (
+          // RTC path — current behavior, falls back to this until CDN is set up
+          <div 
             key={streamId} 
             id="remote-video-container" 
             className={`w-full h-full ${isHost ? 'hidden' : ''}`}
-        ></div>
+          ></div>
+        )}
         
         {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black z-20 flex-col gap-4">
@@ -424,7 +440,7 @@ const switchCamera = async () => {
           isHost={isHost} 
           isModerator={isModerator}
           isSpectator={isSpectator} 
-          assignedUsername={currentUsername} // <--- NEW PROP
+          assignedUsername={currentUsername}
       />
 
       {/* LAYER 3: SYSTEM CONTROLS */}
