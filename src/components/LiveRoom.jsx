@@ -385,9 +385,9 @@ const switchCamera = async () => {
     if (Math.abs(deltaX) < horizontalThreshold) return;
     if (Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
 
-    // Swipe right => hide overlays, swipe left => show overlays.
-    if (deltaX > 0) setIsOverlayHidden(true);
-    if (deltaX < 0) setIsOverlayHidden(false);
+    // Swipe left => hide overlays, swipe right => show overlays.
+    if (deltaX < 0) setIsOverlayHidden(true);
+    if (deltaX > 0) setIsOverlayHidden(false);
   };
 
   const toggleMic = async () => {
