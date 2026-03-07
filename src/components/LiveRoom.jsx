@@ -61,12 +61,15 @@ export const LiveRoom = ({ roomId }) => {
   const [cameras, setCameras] = useState([]);
   const [cameraFacingMode, setCameraFacingMode] = useState("environment"); // rear="environment" | front="user"
   const [showModPanel, setShowModPanel] = useState(false);
+  const [isOverlayHidden, setIsOverlayHidden] = useState(false);
 
   // Refs
   const clientRef = useRef(null);
   const localTracksRef = useRef({ audio: null, video: null });
   const analyticsSessionKey = useRef(null);
   const lastKickNowRef = useRef(null); // CHANGE HERE: ignore old kickNow
+  const swipeStartRef = useRef({ x: 0, y: 0 });
+  const swipeEndRef = useRef({ x: 0, y: 0 });
 
 
   useEffect(() => {
@@ -360,6 +363,33 @@ const switchCamera = async () => {
   }
 };
 
+  const handleTouchStart = (event) => {
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    const point = { x: touch.clientX, y: touch.clientY };
+    swipeStartRef.current = point;
+    swipeEndRef.current = point;
+  };
+
+  const handleTouchMove = (event) => {
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    swipeEndRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = () => {
+    const deltaX = swipeEndRef.current.x - swipeStartRef.current.x;
+    const deltaY = swipeEndRef.current.y - swipeStartRef.current.y;
+    const horizontalThreshold = 72;
+
+    if (Math.abs(deltaX) < horizontalThreshold) return;
+    if (Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
+
+    // Swipe right => hide overlays, swipe left => show overlays.
+    if (deltaX > 0) setIsOverlayHidden(true);
+    if (deltaX < 0) setIsOverlayHidden(false);
+  };
+
   const toggleMic = async () => {
       if (localTracksRef.current.audio) {
           const newState = !isMicOn;
@@ -389,7 +419,12 @@ const switchCamera = async () => {
   }
 
   return (
-    <div className="fixed inset-0 w-full h-[100dvh] bg-black text-white overflow-hidden supports-[height:100dvh]:h-[100dvh]">
+    <div
+      className="fixed inset-0 w-full h-[100dvh] bg-black text-white overflow-hidden supports-[height:100dvh]:h-[100dvh]"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       
       {/* LAYER 1: VIDEO */}
       <div className="absolute inset-0 z-0 max-w-md mx-auto w-full bg-black">
@@ -419,16 +454,18 @@ const switchCamera = async () => {
       </div>
 
       {/* LAYER 2: INTERACTION */}
-      <InteractionLayer 
-          roomId={roomId} 
-          isHost={isHost} 
-          isModerator={isModerator}
-          isSpectator={isSpectator} 
-          assignedUsername={currentUsername} // <--- NEW PROP
-      />
+      <div className={`absolute inset-0 z-30 transition-opacity duration-200 ${isOverlayHidden ? 'opacity-0 invisible' : 'opacity-100 visible'}`}>
+        <InteractionLayer 
+            roomId={roomId} 
+            isHost={isHost} 
+            isModerator={isModerator}
+            isSpectator={isSpectator} 
+            assignedUsername={currentUsername} // <--- NEW PROP
+        />
+      </div>
 
       {/* LAYER 3: SYSTEM CONTROLS */}
-      <div className="absolute inset-0 z-50 pointer-events-none p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex flex-col justify-between max-w-md mx-auto w-full">
+      <div className={`absolute inset-0 z-50 pointer-events-none p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex flex-col justify-between max-w-md mx-auto w-full transition-opacity duration-200 ${isOverlayHidden ? 'opacity-0 invisible' : 'opacity-100 visible'}`}>
         
         <div className="flex justify-between items-start pointer-events-auto">
             <div className="flex flex-col items-start gap-0.5">
