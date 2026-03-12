@@ -893,6 +893,8 @@ const bookLiveSell = async () => {
   const canSwitchMode = isHost && !isSaleActive;
   const isBidder = !isHost && !isModerator && !isSpectator;
   const liveSellDisplayPrice = isLiveSellActive ? liveSellPrice : currentBid;
+  const saleModeButtonBottom = "calc(15.25rem + env(safe-area-inset-bottom))";
+  const saleStartButtonBottom = "calc(2.25rem + env(safe-area-inset-bottom))";
   const bidderWrapClass = "flex flex-col items-center gap-2 transition-all duration-300";
   const liveSellButtonClass = isLiveSellActive
     ? 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer'
@@ -1031,6 +1033,86 @@ const bookLiveSell = async () => {
               </motion.div>
           )}
       </div>
+
+      {/* HOST: SALE MODE ABOVE GO LIVE */}
+      {isHost && (
+        <div
+          className="absolute right-4 z-[70] pointer-events-auto"
+          style={{ bottom: saleModeButtonBottom }}
+        >
+          <div className="relative flex flex-col items-center gap-1">
+            <button
+              onClick={() => setShowModePicker((prev) => !prev)}
+              disabled={!canSwitchMode}
+              className={`h-9 w-9 rounded-full flex items-center justify-center transition-all shadow-lg pointer-events-auto border ${
+                canSwitchMode
+                  ? 'bg-black/70 text-white border-white/20 hover:bg-white/10'
+                  : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
+              }`}
+              title="Sale Mode"
+              aria-label="Sale Mode"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            {showModePicker && (
+              <div className="absolute bottom-full mb-2 flex flex-col gap-1 p-1 rounded-xl bg-black/80 border border-white/10 shadow-xl">
+                <button
+                  type="button"
+                  onClick={() => setSaleModeInDb('auction')}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
+                    saleMode === 'auction'
+                      ? 'bg-[#FF6600] text-white'
+                      : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  }`}
+                >
+                  Live Auction
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSaleModeInDb('live_sell')}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
+                    saleMode === 'live_sell'
+                      ? 'bg-[#FF6600] text-white'
+                      : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  }`}
+                >
+                  Live Sell
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* HOST: SALE START BELOW GO LIVE */}
+      {isHost && (
+        <div
+          className="absolute right-4 z-[70] pointer-events-auto"
+          style={{ bottom: saleStartButtonBottom }}
+        >
+          <button
+            onClick={toggleSale}
+            className={`h-14 w-14 rounded-full flex items-center justify-center transition-all shadow-lg z-50 pointer-events-auto ${
+              isSaleActive
+                ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
+                : 'bg-dibs-neon text-black hover:bg-white'
+            }`}
+            title={
+              isSaleActive
+                ? (isLiveSellMode ? 'Stop Live Sell' : 'Stop Auction')
+                : (isLiveSellMode ? 'Start Live Sell' : 'Start Auction')
+            }
+            aria-label={
+              isSaleActive
+                ? (isLiveSellMode ? 'Stop Live Sell' : 'Stop Auction')
+                : (isLiveSellMode ? 'Start Live Sell' : 'Start Auction')
+            }
+          >
+            {isSaleActive ? <X className="w-5 h-5" /> : (isLiveSellMode ? <ShoppingBag className="w-5 h-5" /> : <Gavel className="w-5 h-5" />)}
+          </button>
+        </div>
+      )}
     
 <div className="absolute inset-x-0 bottom-0 px-4 pt-4 pb-2 flex flex-col justify-end z-30 pointer-events-none h-[85%]">
 
@@ -1348,75 +1430,6 @@ const bookLiveSell = async () => {
         {!isSpectator && (
             <div className="flex flex-col gap-2 pointer-events-auto items-end w-[40%] max-w-[10rem]"> 
                 
-                {/* Host Controls */}
-                {isHost && (
-                  <div className="flex flex-col items-center gap-2 w-full">
-                    <div className="flex flex-col items-center gap-1">
-                      <button
-                        onClick={() => setShowModePicker((prev) => !prev)}
-                        disabled={!canSwitchMode}
-                        className={`h-9 w-9 rounded-full flex items-center justify-center transition-all shadow-lg pointer-events-auto border ${
-                          canSwitchMode
-                            ? 'bg-black/70 text-white border-white/20 hover:bg-white/10'
-                            : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
-                        }`}
-                        title="Sale Mode"
-                        aria-label="Sale Mode"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </button>
-
-                      {showModePicker && (
-                        <div className="flex flex-col gap-1 p-1 rounded-xl bg-black/80 border border-white/10 shadow-xl">
-                          <button
-                            type="button"
-                            onClick={() => setSaleModeInDb('auction')}
-                            className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
-                              saleMode === 'auction'
-                                ? 'bg-[#FF6600] text-white'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                            }`}
-                          >
-                            Live Auction
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSaleModeInDb('live_sell')}
-                            className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
-                              saleMode === 'live_sell'
-                                ? 'bg-[#FF6600] text-white'
-                                : 'bg-white/5 text-white/70 hover:bg-white/10'
-                            }`}
-                          >
-                            Live Sell
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={toggleSale}
-                      className={`h-14 w-14 mb-4 rounded-full flex items-center justify-center transition-all shadow-lg z-50 pointer-events-auto ${
-                        isSaleActive
-                          ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
-                          : 'bg-dibs-neon text-black hover:bg-white'
-                      }`}
-                      title={
-                        isSaleActive
-                          ? (isLiveSellMode ? 'Stop Live Sell' : 'Stop Auction')
-                          : (isLiveSellMode ? 'Start Live Sell' : 'Start Auction')
-                      }
-                      aria-label={
-                        isSaleActive
-                          ? (isLiveSellMode ? 'Stop Live Sell' : 'Stop Auction')
-                          : (isLiveSellMode ? 'Start Live Sell' : 'Start Auction')
-                      }
-                    >
-                      {isSaleActive ? <X className="w-5 h-5" /> : (isLiveSellMode ? <ShoppingBag className="w-5 h-5" /> : <Gavel className="w-5 h-5" />)}
-                    </button>
-                  </div>
-                )}
-
                 {/* Bidder Controls */}
                 {renderBidderControls()}
             </div>
