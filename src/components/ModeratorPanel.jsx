@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ref, onValue, update } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { Shield, MessageSquareOff, Ban, Gavel, XCircle, History, X, UserX, UserCheck } from 'lucide-react'; // CHANGE HERE
@@ -7,7 +7,8 @@ import { Shield, MessageSquareOff, Ban, Gavel, XCircle, History, X, UserX, UserC
 export const ModeratorPanel = ({ roomId, onClose }) => {
   const [activeTab, setActiveTab] = useState('users'); // 'users' or 'history'
   const [users, setUsers] = useState([]);
-  const [history, setHistory] = useState([]);
+  const [auctionHistory, setAuctionHistory] = useState([]);
+  const [liveSellHistory, setLiveSellHistory] = useState([]);
   const [onlineIds, setOnlineIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [onlineData, setOnlineData] = useState({});
@@ -111,8 +112,28 @@ return onValue(usersRef, (snapshot) => { //EFF CHANGE
       const data = snapshot.val();
       if (data) {
         // Sort by timestamp descending
-        const histList = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
-        setHistory(histList);
+        const histList = Object.values(data)
+          .map((item) => ({ ...item, type: 'auction' }))
+          .sort((a, b) => b.timestamp - a.timestamp);
+        setAuctionHistory(histList);
+      } else {
+        setAuctionHistory([]);
+      }
+    });
+  }, [roomId]);
+
+  // 2b. Fetch Live Sell History
+  useEffect(() => {
+    const historyRef = ref(db, `rooms/${roomId}/liveSellHistory`);
+    return onValue(historyRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const histList = Object.values(data)
+          .map((item) => ({ ...item, type: 'live_sell' }))
+          .sort((a, b) => b.timestamp - a.timestamp);
+        setLiveSellHistory(histList);
+      } else {
+        setLiveSellHistory([]);
       }
     });
   }, [roomId]);
@@ -215,6 +236,11 @@ useEffect(() => {
       }
       return acc;
   }, { activeAudience: 0, inactiveAudience: 0, activeSpectators: 0, inactiveSpectators: 0 });
+
+  const combinedHistory = useMemo(() => {
+    const merged = [...auctionHistory, ...liveSellHistory];
+    return merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  }, [auctionHistory, liveSellHistory]);
 
   return (
     <div className="absolute top-20 left-4 right-4 bottom-32 bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden flex flex-col z-50 pointer-events-auto shadow-2xl">
@@ -414,36 +440,64 @@ useEffect(() => {
                 );
             })}
 
-        {/* AUCTION HISTORY TAB */}
-        {activeTab === 'history' && history.map((item, i) => (
+        {/* HISTORY TAB */}
+        {activeTab === 'history' && combinedHistory.map((item, i) => (
             <div key={i} className="bg-white/5 border border-white/5 p-3 rounded-xl space-y-2">
-                <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="font-bold text-white text-sm">
-                      {/* CHANGE: prefer snapshot if present */}
-                      {item.item?.name || item.itemName}
-                    </span>
-                    <span className="font-mono text-dibs-neon">Sold: ₹{item.finalPrice}</span>
+                <div className="flex justify-between border-b border-white/5 pb-2 items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">
+                        {/* CHANGE: prefer snapshot if present */}
+                        {item.item?.name || item.itemName}
+                      </span>
+                      <span className="px-1.5 py-0.5 bg-black/40 border border-white/10 text-[9px] font-black uppercase rounded text-zinc-400">
+                        {item.type === 'live_sell' ? 'Live Sell' : 'Auction'}
+                      </span>
+                    </div>
+                    {item.type === 'live_sell' ? (
+                      <span className="font-mono text-dibs-neon">Price: INR {item.price}</span>
+                    ) : (
+                      <span className="font-mono text-dibs-neon">Sold: INR {item.finalPrice}</span>
+                    )}
                 </div>
                 
-                <div className="space-y-1">
-                    <span className="text-[10px] uppercase text-zinc-500 font-bold">Top Bidders</span>
-                    {item.topBidders && item.topBidders.map((bidder, idx) => (
+                {item.type === 'live_sell' ? (
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase text-zinc-500 font-bold">Bookings</span>
+                    {item.bookings && item.bookings.length > 0 ? (
+                      item.bookings.map((booking, idx) => (
                         <div key={idx} className="flex justify-between text-xs">
-                            <span className="text-zinc-300">
-                              {idx + 1}. {bidder.user} {bidder.phone ? `(${bidder.phone})` : ""}
-                            </span>
-                            <span className="font-mono text-zinc-500">₹{bidder.amount}</span>
+                          <span className="text-zinc-300">
+                            {idx + 1}. {booking.user} {booking.phone ? `(${booking.phone})` : ""}
+                          </span>
+                          <span className="font-mono text-zinc-500">INR {booking.price}</span>
                         </div>
-                    ))}
-                </div>
-                <div className="text-[10px] text-right text-zinc-600 font-mono pt-1">
-                    Winner: {item.winner}
-                </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-zinc-500">No bookings (unsold)</div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                        <span className="text-[10px] uppercase text-zinc-500 font-bold">Top Bidders</span>
+                        {item.topBidders && item.topBidders.map((bidder, idx) => (
+                            <div key={idx} className="flex justify-between text-xs">
+                                <span className="text-zinc-300">
+                                  {idx + 1}. {bidder.user} {bidder.phone ? `(${bidder.phone})` : ""}
+                                </span>
+                                <span className="font-mono text-zinc-500">INR {bidder.amount}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="text-[10px] text-right text-zinc-600 font-mono pt-1">
+                        Winner: {item.winner}
+                    </div>
+                  </>
+                )}
             </div>
         ))}
-
-        {activeTab === 'history' && history.length === 0 && (
-            <div className="text-center text-zinc-500 text-xs mt-10">No auctions finished yet.</div>
+        {activeTab === 'history' && combinedHistory.length === 0 && (
+            <div className="text-center text-zinc-500 text-xs mt-10">No sales finished yet.</div>
         )}
       </div>
     </div>
@@ -457,3 +511,4 @@ const StatBox = ({ label, count, color }) => (
         <span className="text-[8px] font-mono uppercase text-zinc-400 text-center leading-tight">{label}</span>
     </div>
 );
+

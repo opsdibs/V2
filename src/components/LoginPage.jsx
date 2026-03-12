@@ -335,13 +335,12 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
     }
 
     // ============================================================
-    // 🛠️ DEV BYPASS: Force Spectator Mode for Testing
-    // Type '0000000000' as phone to skip DB/Time checks
+    // DEV BYPASS: Join as TEST audience (can book)
+    // Type 1212121212 as phone to bypass DB/Time checks
     if (cleanPhone === "1212121212") {
-        console.log("⚠️ DEV MODE: Forcing Spectator Modal");
-        setTempCredentials({ email: inputEmail, phone: cleanPhone });
-        setLoading(false);
-        setShowSpectatorModal(true); 
+        console.log('DEV MODE: Joining as TEST audience');
+        const uniqueName = await getUniqueUsername(roomId, cleanPhone, 'Test_');
+        await joinRoom('audience', 'TEST-' + cleanPhone, cleanPhone, inputEmail, uniqueName);
         return;
     }
     // ============================================================

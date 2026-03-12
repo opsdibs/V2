@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X } from 'lucide-react'; // CHANGE
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X, Settings } from 'lucide-react'; // CHANGE
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get, query, limitToLast } from "firebase/database"; //EFF CHANGE
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
@@ -24,6 +24,9 @@ const parseInventory = () => {
 };
 
 const INVENTORY = parseInventory();
+
+const AUCTION_DURATION_SECONDS = 20;
+const LIVE_SELL_DURATION_SECONDS = 20;
 
 const glassSurface =
   "relative overflow-hidden rounded-2xl " +
@@ -50,8 +53,13 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [customItems, setCustomItems] = useState([]);
 
   const [isAuctionActive, setIsAuctionActive] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(AUCTION_DURATION_SECONDS);
   const [endTime, setEndTime] = useState(0);
+  const [saleMode, setSaleMode] = useState("auction"); // 'auction' | 'live_sell'
+  const [isLiveSellActive, setIsLiveSellActive] = useState(false);
+  const [liveSellEndTime, setLiveSellEndTime] = useState(0);
+  const [liveSellPrice, setLiveSellPrice] = useState(0);
+  const [showModePicker, setShowModePicker] = useState(false);
 
   // CHANGE: current item becomes a snapshot object (static/custom)
   const [selectedItem, setSelectedItem] = useState(null); // { kind: 'static'|'custom', id, name, desc, startPrice }
@@ -67,18 +75,23 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   
 const chatEndRef = useRef(null);
 const chatContainerRef = useRef(null);
-const isAuctionActiveRef = useRef(false);
-const currentBidRef = useRef(0);
-const bidIncrementRef = useRef(10); // BIDINCREMENt CHANGE
+	const isAuctionActiveRef = useRef(false);
+	const currentBidRef = useRef(0);
+	const bidIncrementRef = useRef(10); // BIDINCREMENt CHANGE
+	const isLiveSellActiveRef = useRef(false);
 
 
 // CHANGE: ref holds the same snapshot as selectedItem (not just an id)
 const currentItemRef = useRef(null);
 
-const currentAuctionIdRef = useRef(null); // change here
-const currentAuctionItemRef = useRef(null); // change here
+	const currentAuctionIdRef = useRef(null); // change here
+	const currentAuctionItemRef = useRef(null); // change here
+	const currentLiveSellIdRef = useRef(null);
+	const currentLiveSellItemRef = useRef(null);
+	const currentLiveSellPriceRef = useRef(0);
 
-  const stopTriggeredRef = useRef(false);
+  const stopAuctionTriggeredRef = useRef(false);
+  const stopLiveSellTriggeredRef = useRef(false);
 
   // For enforcing bans/kicks
   const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false, isKicked: false }); // changes
@@ -91,6 +104,8 @@ const currentAuctionItemRef = useRef(null); // change here
   const pinnedRef = ref(db, `rooms/${roomId}/pinnedChat`);
   const bidRef = ref(db, `rooms/${roomId}/bid`);
   const auctionRef = ref(db, `rooms/${roomId}/auction`);
+  const liveSellRef = ref(db, `rooms/${roomId}/liveSell`);
+  const saleModeRef = ref(db, `rooms/${roomId}/saleMode`);
   const viewersRef = ref(db, `rooms/${roomId}/viewers`);
   const itemRef = ref(db, `rooms/${roomId}/currentItem`);
   const bidIncrementConfigRef = ref(db, `event_config/bid_increment`); // BIDINCREMENt CHANGE
@@ -113,13 +128,43 @@ const currentAuctionItemRef = useRef(null); // change here
       setIsAuctionActive(data.isActive);
       isAuctionActiveRef.current = data.isActive;
       setEndTime(data.endTime || 0);
-      if (data.isActive) stopTriggeredRef.current = false;
+      if (data.isActive) stopAuctionTriggeredRef.current = false;
 
       currentAuctionIdRef.current = data.id || null;
       currentAuctionItemRef.current = data.itemSnapshot || null;
     } else {
       currentAuctionIdRef.current = null; // change here
       currentAuctionItemRef.current = null; // change here
+    }
+  });
+
+  const unsubSaleMode = onValue(saleModeRef, (snapshot) => {
+    const mode = snapshot.val();
+    setSaleMode(mode === 'live_sell' ? 'live_sell' : 'auction');
+  });
+
+  const unsubLiveSell = onValue(liveSellRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      const active = !!data.isActive;
+      setIsLiveSellActive(active);
+      isLiveSellActiveRef.current = active;
+      setLiveSellEndTime(data.endTime || 0);
+      if (active) stopLiveSellTriggeredRef.current = false;
+
+      currentLiveSellIdRef.current = data.id || null;
+      currentLiveSellItemRef.current = data.itemSnapshot || null;
+      const price = Number(data.price) || 0;
+      setLiveSellPrice(price);
+      currentLiveSellPriceRef.current = price;
+    } else {
+      setIsLiveSellActive(false);
+      isLiveSellActiveRef.current = false;
+      setLiveSellEndTime(0);
+      setLiveSellPrice(0);
+      currentLiveSellPriceRef.current = 0;
+      currentLiveSellIdRef.current = null;
+      currentLiveSellItemRef.current = null;
     }
   });
 
@@ -218,6 +263,8 @@ const currentAuctionItemRef = useRef(null); // change here
     unsubBid();
     unsubBidIncrement(); // BIDINCREMENt CHANGE
     unsubAuction();
+    unsubSaleMode();
+    unsubLiveSell();
     unsubViewers();
     unsubItem();
     unsubCustomItems();
@@ -289,29 +336,37 @@ const currentAuctionItemRef = useRef(null); // change here
   }, [roomId, isHost, persistentUserId]);
 
   useEffect(() => {
-      if (!isAuctionActive || !endTime) {
-          setTimeLeft(30);
+      const activeMode = isAuctionActive ? 'auction' : isLiveSellActive ? 'live_sell' : null;
+      const activeEndTime = isAuctionActive ? endTime : liveSellEndTime;
+
+      if (!activeMode || !activeEndTime) {
+          setTimeLeft(AUCTION_DURATION_SECONDS);
           return;
       }
       const interval = setInterval(() => {
           const now = Date.now();
-          const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
+          const remaining = Math.max(0, Math.ceil((activeEndTime - now) / 1000));
           setTimeLeft(remaining);
-          // NEW: Only stop if we haven't already triggered it
+          // Only stop if we haven't already triggered it
           if (remaining === 0 && isHost) {
-              if (!stopTriggeredRef.current) {
-                  stopTriggeredRef.current = true; // Lock it immediately
-                  stopAuction();
+              if (activeMode === 'auction') {
+                  if (!stopAuctionTriggeredRef.current) {
+                      stopAuctionTriggeredRef.current = true;
+                      stopAuction();
+                  }
+              } else if (!stopLiveSellTriggeredRef.current) {
+                  stopLiveSellTriggeredRef.current = true;
+                  stopLiveSell();
               }
-          };
+          }
       }, 100);
       return () => clearInterval(interval);
-  }, [isAuctionActive, endTime, isHost]);
+  }, [isAuctionActive, endTime, isLiveSellActive, liveSellEndTime, isHost]);
 
   useEffect(() => {
-    if (chatEndRef.current) {
-        chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+      if (chatEndRef.current) {
+          chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+      }
   }, [messages]);
 
   // CHANGE: merged list = custom items (DB) + static CSV
@@ -406,7 +461,7 @@ const unpinMessage = () => {
 
     // CHANGE: only host can select the auction item
   const selectItem = (item) => {
-    if (isAuctionActive) return;
+    if (isAuctionActive || isLiveSellActive) return;
     if (!isHost) return;
 
     // CHANGE: store the full snapshot in DB (works for static + custom)
@@ -477,7 +532,7 @@ const unpinMessage = () => {
   };
 
   const handlePriceChange = (e) => {
-      if (isAuctionActive) return; 
+      if (isAuctionActive || isLiveSellActive) return; 
       const valStr = e.target.value;
       if (valStr === '') set(ref(db, `rooms/${roomId}/bid`), 0);
       else {
@@ -487,7 +542,7 @@ const unpinMessage = () => {
   };
 
   const manualStep = (amount) => {
-      if (isAuctionActive) return;
+      if (isAuctionActive || isLiveSellActive) return;
       set(ref(db, `rooms/${roomId}/bid`), Math.max(0, currentBid + amount));
   };
   
@@ -605,14 +660,65 @@ const placeBid = () => {
     });
   });
 };
+
+const bookLiveSell = async () => {
+  if (!isLiveSellActiveRef.current) return;
+  if (isHost || isModerator || isSpectator) return;
+  if (restrictions.isBidBanned) {
+    alert("You are banned from booking.");
+    return;
+  }
+  if (!persistentUserId) {
+    alert("Unable to book: missing user ID.");
+    return;
+  }
+
+  const sessionId = currentLiveSellIdRef.current;
+  const itemSnapshot = currentLiveSellItemRef.current || currentItemRef.current;
+  if (!sessionId || !itemSnapshot) return;
+
+  const price = Number.isFinite(currentLiveSellPriceRef.current)
+    ? currentLiveSellPriceRef.current
+    : (Number(itemSnapshot.startPrice) || 0);
+
+  const profileSnap = await get(ref(db, `rooms/${roomId}/audience_index/${persistentUserId}`));
+  const profile = profileSnap.exists() ? profileSnap.val() : {};
+  const booking = {
+    user: profile?.username || username || "Guest",
+    phone: profile?.phone || getPhoneFromUserId(persistentUserId),
+    price,
+    userId: persistentUserId,
+    timestamp: Date.now(),
+  };
+
+  const bookingRef = ref(db, `rooms/${roomId}/liveSellBookings/${sessionId}/${persistentUserId}`);
+  const result = await runTransaction(bookingRef, (current) => {
+    if (current) return; // already booked
+    return booking;
+  });
+
+  if (!result.committed) {
+    alert("You already booked this item.");
+    return;
+  }
+
+  push(ref(db, `rooms/${roomId}/chat`), {
+    text: `${booking.user} booked ${itemSnapshot.name} for ₹${price}`,
+    type: 'auction'
+  });
+};
   const startAuction = () => {
     // CHANGE: require selected snapshot (works for static/custom)
     if (!currentItemRef.current) {
       alert("Please select an item first!");
       return;
     }
+    if (isLiveSellActiveRef.current) {
+      alert("Please stop Live Sell before starting an auction.");
+      return;
+    }
 
-   const newEndTime = Date.now() + (20 * 1000);
+   const newEndTime = Date.now() + (AUCTION_DURATION_SECONDS * 1000);
     const item = currentItemRef.current;
     const auctionId = push(ref(db, `rooms/${roomId}/auctionSessions`)).key;
 
@@ -688,11 +794,176 @@ const placeBid = () => {
       else startAuction();
   };
 
+  const startLiveSell = () => {
+    if (!currentItemRef.current) {
+      alert("Please select an item first!");
+      return;
+    }
+    if (isAuctionActiveRef.current) {
+      alert("Please stop the auction before starting Live Sell.");
+      return;
+    }
+
+    const newEndTime = Date.now() + (LIVE_SELL_DURATION_SECONDS * 1000);
+    const item = currentItemRef.current;
+    const sessionId = push(ref(db, `rooms/${roomId}/liveSellSessions`)).key;
+    const price = Number.isFinite(currentBidRef.current) ? currentBidRef.current : (Number(item?.startPrice) || 0);
+
+    update(ref(db, `rooms/${roomId}`), {
+      "liveSell/isActive": true,
+      "liveSell/endTime": newEndTime,
+      "liveSell/id": sessionId,
+      "liveSell/itemSnapshot": item,
+      "liveSell/price": price,
+      "liveSell/startedAt": Date.now(),
+    });
+
+    push(ref(db, `rooms/${roomId}/chat`), {
+      text: `Live Sell started: ${item?.name || 'ITEM'} for ₹${price}`,
+      type: 'auction'
+    });
+  };
+
+  const stopLiveSell = async () => {
+    const sessionId = currentLiveSellIdRef.current;
+    const itemSnapshot = currentLiveSellItemRef.current;
+    const price = Number.isFinite(currentLiveSellPriceRef.current) ? currentLiveSellPriceRef.current : (Number(itemSnapshot?.startPrice) || 0);
+    if (!sessionId) return;
+
+    if (isLiveSellActiveRef.current) {
+      const bookingsSnap = await get(ref(db, `rooms/${roomId}/liveSellBookings/${sessionId}`));
+      const bookings = bookingsSnap.exists() ? Object.values(bookingsSnap.val()) : [];
+      const normalized = bookings
+        .map((b) => ({
+          user: b?.user || "Unknown",
+          phone: b?.phone || "",
+          price: Number(b?.price) || price,
+          timestamp: Number(b?.timestamp) || 0,
+          userId: b?.userId || "",
+        }))
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+      push(ref(db, `rooms/${roomId}/liveSellHistory`), {
+        itemName: itemSnapshot ? itemSnapshot.name : "Unknown Item",
+        item: itemSnapshot || null,
+        price,
+        bookings: normalized,
+        sold: normalized.length > 0,
+        timestamp: Date.now(),
+        sessionId,
+      });
+
+      push(ref(db, `rooms/${roomId}/chat`), {
+        text: normalized.length
+          ? `Live Sell ended: ${normalized.length} booking(s) for ${itemSnapshot ? itemSnapshot.name : 'ITEM'}`
+          : `Live Sell ended: No bookings for ${itemSnapshot ? itemSnapshot.name : 'ITEM'}`,
+        type: 'auction'
+      });
+    }
+
+    update(ref(db, `rooms/${roomId}`), { "liveSell/isActive": false, "liveSell/endTime": 0 });
+    remove(ref(db, `rooms/${roomId}/liveSellBookings/${sessionId}`));
+  };
+
+  const toggleLiveSell = () => {
+    if (isLiveSellActive) stopLiveSell();
+    else startLiveSell();
+  };
+
+  const toggleSale = () => {
+    if (saleMode === 'live_sell') toggleLiveSell();
+    else toggleAuction();
+  };
+
+  const setSaleModeInDb = async (mode) => {
+    if (!isHost) return;
+    if (isAuctionActive || isLiveSellActive) return;
+    const next = mode === 'live_sell' ? 'live_sell' : 'auction';
+    await set(ref(db, `rooms/${roomId}/saleMode`), next);
+    setShowModePicker(false);
+  };
+
+  const isSaleActive = isAuctionActive || isLiveSellActive;
+  const isLiveSellMode = saleMode === 'live_sell';
+  const priceLabel = isAuctionActive
+    ? "Current Bid"
+    : isLiveSellMode
+      ? "Live Price"
+      : "Starting Price";
+  const canSwitchMode = isHost && !isSaleActive;
+  const isBidder = !isHost && !isModerator && !isSpectator;
+  const liveSellDisplayPrice = isLiveSellActive ? liveSellPrice : currentBid;
+  const bidderWrapClass = "flex flex-col items-center gap-2 transition-all duration-300";
+  const liveSellButtonClass = isLiveSellActive
+    ? 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer'
+    : 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-zinc-800 text-zinc-600 cursor-not-allowed';
+  const auctionButtonClass = isAuctionActive
+    ? 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer'
+    : 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-zinc-800 text-zinc-600 cursor-not-allowed';
+
+  useEffect(() => {
+      if (isSaleActive) setShowModePicker(false);
+  }, [isSaleActive]);
+
   // DYNAMIC STYLES
   // If Spectator: Full Width. If Bidder/Host: 55% Width.
   const leftColumnClass = isSpectator 
       ? "w-full max-w-md mx-auto" 
       : "w-[55%] max-w-[14rem]";
+
+  const renderBidderControls = () => {
+    if (!isBidder) return null;
+
+    if (isLiveSellMode) {
+      return (
+        <div className={bidderWrapClass}>
+          <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
+            <button
+              onClick={bookLiveSell}
+              disabled={!isLiveSellActive}
+              className={liveSellButtonClass}
+            >
+              <span>BOOK {"\u20B9"}{liveSellDisplayPrice}</span>
+            </button>
+            <div className="text-[10px] text-zinc-500 text-center mt-2">
+              {LIVE_SELL_DURATION_SECONDS}s booking window
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={bidderWrapClass}>
+        <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
+          <div className="flex items-center justify-between px-2 py-2">
+            <button 
+              onClick={handleDecrease} 
+              disabled={!isAuctionActive || customBid <= currentBid + bidIncrement} // BIDINCREMENt CHANGE
+              className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + bidIncrement) ? 'cursor-not-allowed' : ''}`} // BIDINCREMENt CHANGE
+            >
+              <Minus className="w-8 h-8" />
+            </button>
+
+            <button 
+              onClick={handleIncrease} 
+              disabled={!isAuctionActive}
+              className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!isAuctionActive ? 'cursor-not-allowed' : ''}`}
+            >
+              <Plus className="w-8 h-8" />
+            </button>
+          </div>
+          <button 
+            onClick={placeBid} 
+            disabled={!isAuctionActive}
+            className={auctionButtonClass}
+          >
+            <span>{"\u20B9"}{customBid}</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden max-w-md mx-auto border-x border-white/5 shadow-2xl">
@@ -708,16 +979,16 @@ const placeBid = () => {
       {/* TOP RIGHT: STATS (Unchanged) */}
       <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] right-4 pointer-events-auto flex flex-col items-end gap-2 z-[60]">
           {/* ... (Keep existing stats code) ... */}
-          <div className={`${glassSurface} ${glassHighlight} p-2 min-w-fit px-4 flex flex-col items-end transition-colors ${isAuctionActive ? 'bg-red-600/45 border-[#FF6600]' : ''}`}>
-<span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isAuctionActive ? 'text-white' : 'text-[#FF6600]'}`}>
-  {isAuctionActive ? "Current Bid" : "Starting Price"}
-</span>
+          <div className={`${glassSurface} ${glassHighlight} p-2 min-w-fit px-4 flex flex-col items-end transition-colors ${isSaleActive ? 'bg-red-600/45 border-[#FF6600]' : ''}`}>
+	<span className={`text-[11px] font-display uppercase font-black tracking-wider mb-1 px-1 ${isSaleActive ? 'text-white' : 'text-[#FF6600]'}`}>
+	  {priceLabel}
+	</span>
     {/* --- CHANGE 1: RESTORED HOST PRICE CONTROLS --- */}
     <div className="flex items-center justify-end gap-1 w-full">
         
         {/* A. Manual Step Buttons (Host Only, Inactive Auction) */}
-        {isHost && !isAuctionActive && (
-            <div className="flex flex-col gap-0.5 mr-2">
+	        {isHost && !isSaleActive && (
+	            <div className="flex flex-col gap-0.5 mr-2">
                  <button onClick={() => manualStep(bidIncrement)} className="text-white hover:text-[#FF6600] transition-colors"> {/* BIDINCREMENt CHANGE */}
                      <ChevronUp className="w-3 h-3" />
                  </button>
@@ -735,15 +1006,15 @@ const placeBid = () => {
                   type="number"
                   value={currentBid === 0 ? '' : currentBid}
                   onChange={handlePriceChange}
-                  disabled={isAuctionActive}
-                  step={bidIncrement} // BIDINCREMENt CHANGE
-                  placeholder="0"
+	                  disabled={isSaleActive}
+	                  step={bidIncrement} // BIDINCREMENt CHANGE
+	                  placeholder="0"
                   style={{ width: `${Math.max(2, (currentBid?.toString() || "").length + 1)}ch` }}
                   className={`
                       bg-transparent text-right font-display font-black text-4xl outline-none p-0 m-0 placeholder:text-white/20 pointer-events-auto relative z-[70]
-                      ${isAuctionActive ? 'text-white' : 'text-white border-b border-dashed border-white/20'}
-                  `}
-              />
+	                      ${isSaleActive ? 'text-white' : 'text-white border-b border-dashed border-white/20'}
+	                  `}
+	              />
                       ) : (
                         <span className="text-4xl font-display font-black text-white tabular-nums tracking-tighter">
                             {currentBid}
@@ -753,7 +1024,7 @@ const placeBid = () => {
               </div>
           </div>
 
-          {isAuctionActive && (
+          {isSaleActive && (
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-display text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}>
                   <Clock className="w-3 h-3" />
                   <span>00:{timeLeft.toString().padStart(2, '0')}</span>
@@ -886,7 +1157,7 @@ const placeBid = () => {
                     </div>
 
                     {inventoryItems.map((item) => {
-                      const canSelect = isHost && !isAuctionActive; // CHANGE: only host selects item
+                      const canSelect = isHost && !isSaleActive; // CHANGE: only host selects item
                       if (isHost || isModerator) {
                         return (
                           <button
@@ -949,21 +1220,21 @@ const placeBid = () => {
                 )}
                 </AnimatePresence>
                 {/* CHANGE: show selectedItem instead of CSV-only currentItem */}
-                {selectedItem ? (
-                  <div
-                    onClick={() => {
-                      if ((isHost && !isAuctionActive) || isModerator) setShowInventory(!showInventory); // CHANGE
-                    }}
-                    className={`
+                    {selectedItem ? (
+                      <div
+                        onClick={() => {
+                      if ((isHost && !isSaleActive) || isModerator) setShowInventory(!showInventory); // CHANGE
+                        }}
+                        className={`
                       w-full bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/10
-                      ${(isHost && !isAuctionActive) || isModerator ? "cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all" : ""}
+                      ${(isHost && !isSaleActive) || isModerator ? "cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all" : ""}
                     `}
-                  >
+                      >
                   <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-[#FF6600] uppercase tracking-wider">
                         {selectedItem.kind === "custom" ? "CUSTOM ITEM" : `ITEM #${selectedItem.id}`}
                       </span>
-                                            {((isHost && !isAuctionActive) || isModerator) ? (
+                                            {((isHost && !isSaleActive) || isModerator) ? (
                         <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? "rotate-180" : ""}`} />
                       ) : (
                         <button
@@ -996,7 +1267,7 @@ const placeBid = () => {
                       className="bg-dibs-neon text-black font-bold text-xs px-4 py-3 rounded-xl shadow-lg hover:bg-white transition-colors flex items-center gap-2"
                     >
                       <ShoppingBag className="w-4 h-4" />
-                      {isHost ? "SELECT ITEM TO AUCTION" : "MANAGE INVENTORY"}
+                      {isHost ? (isLiveSellMode ? "SELECT ITEM TO SELL" : "SELECT ITEM TO AUCTION") : "MANAGE INVENTORY"}
                     </button>
                   )
                 )}
@@ -1077,61 +1348,77 @@ const placeBid = () => {
         {!isSpectator && (
             <div className="flex flex-col gap-2 pointer-events-auto items-end w-[40%] max-w-[10rem]"> 
                 
-                {/* Host Start/Stop Button */}
+                {/* Host Controls */}
                 {isHost && (
-                    <button
-                    onClick={toggleAuction}
-                    className={`h-14 w-14 mb-4 rounded-full flex items-center justify-center transition-all shadow-lg z-50 pointer-events-auto ${
-                        isAuctionActive
-                        ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
-                        : 'bg-dibs-neon text-black hover:bg-white'
-                    }`}
-                    title={isAuctionActive ? 'Stop Auction' : 'Start Auction'}
-                    aria-label={isAuctionActive ? 'Stop Auction' : 'Start Auction'}
-                    >
-                    {isAuctionActive ? <X className="w-5 h-5" /> : <Gavel className="w-5 h-5" />}
-                    </button>
-                )}
+                  <div className="flex flex-col items-center gap-2 w-full">
+                    <div className="flex flex-col items-center gap-1">
+                      <button
+                        onClick={() => setShowModePicker((prev) => !prev)}
+                        disabled={!canSwitchMode}
+                        className={`h-9 w-9 rounded-full flex items-center justify-center transition-all shadow-lg pointer-events-auto border ${
+                          canSwitchMode
+                            ? 'bg-black/70 text-white border-white/20 hover:bg-white/10'
+                            : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
+                        }`}
+                        title="Sale Mode"
+                        aria-label="Sale Mode"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
 
-                {/* Viewer Bidding Buttons */}
-                {!isHost && (
-                <div className={`flex flex-col items-center gap-2 transition-all duration-300 ${isAuctionActive ? 'opacity-100' : 'opacity-100'}`}>
-                    <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
-                        <div className="flex items-center justify-between px-2 py-2">
-                            <button 
-                                onClick={handleDecrease} 
-                                disabled={!isAuctionActive || customBid <= currentBid + bidIncrement} // BIDINCREMENt CHANGE
-                                className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + bidIncrement) ? 'cursor-not-allowed' : ''}`} // BIDINCREMENt CHANGE
-                            >
-                                <Minus className="w-8 h-8" />
-                            </button>
-
-                            <button 
-                                onClick={handleIncrease} 
-                                disabled={!isAuctionActive}
-                                    className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!isAuctionActive ? 'cursor-not-allowed' : ''}`}
-                                >
-                                    <Plus className="w-8 h-8" />
-                                </button>
-                            </div>
-                            <button 
-                                onClick={placeBid} 
-                                disabled={!isAuctionActive}
-                                className={`
-                                    w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center
-                                    text-2xl sm:text-3xl
-                                    bg-[#FF6600] text-white
-                                    ${isAuctionActive 
-                                        ? 'active:scale-95 hover:bg-[#ff8533] cursor-pointer' 
-                                        : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                                    }
-                                `}
-                            >
-                                <span>{"\u20B9"}{customBid}</span>
-                            </button>
+                      {showModePicker && (
+                        <div className="flex flex-col gap-1 p-1 rounded-xl bg-black/80 border border-white/10 shadow-xl">
+                          <button
+                            type="button"
+                            onClick={() => setSaleModeInDb('auction')}
+                            className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
+                              saleMode === 'auction'
+                                ? 'bg-[#FF6600] text-white'
+                                : 'bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                          >
+                            Live Auction
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSaleModeInDb('live_sell')}
+                            className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
+                              saleMode === 'live_sell'
+                                ? 'bg-[#FF6600] text-white'
+                                : 'bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                          >
+                            Live Sell
+                          </button>
                         </div>
+                      )}
                     </div>
+
+                    <button
+                      onClick={toggleSale}
+                      className={`h-14 w-14 mb-4 rounded-full flex items-center justify-center transition-all shadow-lg z-50 pointer-events-auto ${
+                        isSaleActive
+                          ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
+                          : 'bg-dibs-neon text-black hover:bg-white'
+                      }`}
+                      title={
+                        isSaleActive
+                          ? (isLiveSellMode ? 'Stop Live Sell' : 'Stop Auction')
+                          : (isLiveSellMode ? 'Start Live Sell' : 'Start Auction')
+                      }
+                      aria-label={
+                        isSaleActive
+                          ? (isLiveSellMode ? 'Stop Live Sell' : 'Stop Auction')
+                          : (isLiveSellMode ? 'Start Live Sell' : 'Start Auction')
+                      }
+                    >
+                      {isSaleActive ? <X className="w-5 h-5" /> : (isLiveSellMode ? <ShoppingBag className="w-5 h-5" /> : <Gavel className="w-5 h-5" />)}
+                    </button>
+                  </div>
                 )}
+
+                {/* Bidder Controls */}
+                {renderBidderControls()}
             </div>
         )}
       </div>
