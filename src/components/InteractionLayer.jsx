@@ -897,8 +897,8 @@ const bookLiveSell = async () => {
   const saleStartButtonBottom = "calc(2.25rem + env(safe-area-inset-bottom))";
   const bidderWrapClass = "flex flex-col items-center gap-2 transition-all duration-300";
   const liveSellButtonClass = isLiveSellActive
-    ? 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer'
-    : 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-zinc-800 text-zinc-600 cursor-not-allowed';
+    ? 'w-full py-4 rounded-[2rem] transition-all flex flex-col items-center justify-center gap-1 bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer'
+    : 'w-full py-4 rounded-[2rem] transition-all flex flex-col items-center justify-center gap-1 bg-zinc-800 text-zinc-600 cursor-not-allowed';
   const auctionButtonClass = isAuctionActive
     ? 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer'
     : 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-zinc-800 text-zinc-600 cursor-not-allowed';
@@ -919,13 +919,15 @@ const bookLiveSell = async () => {
     if (isLiveSellMode) {
       return (
         <div className={bidderWrapClass}>
-          <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
+        <div className="bg-black rounded-[2.5rem] p-4 shadow-2xl border border-white/10 w-full mb-4 min-h-[6rem] flex flex-col justify-center">
             <button
               onClick={bookLiveSell}
               disabled={!isLiveSellActive}
               className={liveSellButtonClass}
             >
-              <span>BOOK {"\u20B9"}{liveSellDisplayPrice}</span>
+              <span className="text-[12px] uppercase tracking-[0.35em] font-black">
+                Buy
+              </span>
             </button>
             <div className="text-[10px] text-zinc-500 text-center mt-2">
               {LIVE_SELL_DURATION_SECONDS}s booking window
