@@ -704,7 +704,7 @@ const bookLiveSell = async () => {
 
   push(ref(db, `rooms/${roomId}/chat`), {
     text: `${booking.user} booked ${itemSnapshot.name} for ₹${price}`,
-    type: 'auction'
+    type: 'booking'
   });
 };
   const startAuction = () => {
@@ -1134,7 +1134,7 @@ const bookLiveSell = async () => {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     className={`self-start w-full rounded-[24px] px-4 py-2 shadow-sm break-words font-display ${
-                        msg.type === 'bid' 
+                        msg.type === 'bid' || msg.type === 'booking'
                         ? 'bg-[#ff6500] border border-white/20 text-white font-bold'
                         : msg.type === 'auction'
                         ? 'bg-[#161616] border border-[#ff6500] text-white font-bold'
