@@ -93,7 +93,7 @@ const CoinStackLoader = ({ onComplete }) => {
                className="absolute inset-0 flex items-center justify-center z-50"
            >
                <h1 
-                className="text-8xl font-display font-retro leading-[1] tracking-tight text-white select-none mix-blend-normal"
+                className="text-7xl font-display font-retro leading-[1] tracking-tight text-white select-none mix-blend-normal"
                 style={{ textShadow: '8px 8px 0px #000000' }}
                >
                 DIBS!
