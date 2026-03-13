@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, AlertCircle, Key, Mail, Lock, X } from 'lucide-react';
+import { ArrowRight, AlertCircle, Lock } from 'lucide-react';
 import { ref, push, set, get, update } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { logEvent } from '../lib/analytics';
@@ -215,10 +215,6 @@ export const LoginPage = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   
-  // Spectator Modal State
-  const [showSpectatorModal, setShowSpectatorModal] = useState(false);
-  const [tempCredentials, setTempCredentials] = useState({ email: "", phone: "" });
-
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   useEffect(() => {
@@ -375,7 +371,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
     }
   }
 
-  // --- 6. TIME GATE (Applies to Registered AND Spectators) ---
+  // --- 6. TIME GATE (Applies to all entrants) ---
   if (configSnap.exists()) {
     const config = configSnap.val();
     const now = new Date();
@@ -397,57 +393,33 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
     }
   }
 
-  // --- 7. ALLOWED GUEST CHECK ---
-  if (guestSnap.exists()) {
-    if (guestSnap.val().email.toLowerCase() !== inputEmail) {
-      setError("Email does not match records."); setLoading(false); return;
-    }
-    const uniqueName = await getUniqueUsername(roomId, cleanPhone);
-    logEvent(roomId, 'LOGIN_SUCCESS', { role: 'audience', phone: cleanPhone });
-    await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
-  } else {
-    setTempCredentials({ email: inputEmail, phone: cleanPhone });
-    setLoading(false);
-    logEvent(roomId, 'LOGIN_UNKNOWN_USER', { phone: cleanPhone });
-    setShowSpectatorModal(true); 
+  // --- 7. OPEN ACCESS: allow anyone with valid email/phone to join as audience ---
+  const isOnGuestList = guestSnap.exists();
+  const guestEmail = isOnGuestList ? String(guestSnap.val()?.email || "").toLowerCase() : "";
+  const isEmailMatch = isOnGuestList ? guestEmail === inputEmail : false;
+
+  if (isOnGuestList && !isEmailMatch) {
+    logEvent(roomId, 'LOGIN_EMAIL_MISMATCH', { phone: cleanPhone, email: inputEmail });
   }
+
+  if (!isOnGuestList) {
+    logEvent(roomId, 'LOGIN_UNKNOWN_USER', { phone: cleanPhone });
+    const unregisteredRef = ref(db, `rooms/${roomId}/unregistered/${cleanPhone}`);
+    await set(unregisteredRef, {
+      email: inputEmail,
+      phone: cleanPhone,
+      timestamp: Date.now()
+    });
+  }
+
+  const uniqueName = await getUniqueUsername(roomId, cleanPhone);
+  logEvent(roomId, 'LOGIN_SUCCESS', { role: 'audience', phone: cleanPhone, guest: isOnGuestList, emailMatch: isEmailMatch });
+  await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
 } catch (err) {
   console.error(err);
   setError("System Error. Try again.");
   setLoading(false);
 }
-  };
-
-  const confirmSpectatorJoin = async () => {
-      setShowSpectatorModal(false);
-      setLoading(true);
-
-      const { email, phone } = tempCredentials;
-      const specId = `SPEC-${phone}`;
-
-      try {
-          // Record Spectator for Analytics
-          logEvent(roomId, 'SPECTATOR_CONVERSION', { phone: tempCredentials.phone });
-          
-          const unregisteredRef = ref(db, `rooms/${roomId}/unregistered/${phone}`);
-          await set(unregisteredRef, {
-              email: email,
-              phone: phone,
-              timestamp: Date.now()
-          });
-
-          // --- NAME GENERATION ---
-          // Use "Spec_" prefix for spectators so they don't clash with Bidders
-          const uniqueName = await getUniqueUsername(roomId, phone, "Spec_");
-
-          // Join with role='spectator' AND pass the name
-          await joinRoom('spectator', specId, phone, email, uniqueName);
-
-      } catch (err) {
-          console.error("Spectator Join Failed", err);
-          setError("Failed to enter as spectator.");
-          setLoading(false);
-      }
   };
 
   const joinRoom = async (role, uId, phone, mail, username = null) => {
@@ -574,48 +546,6 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                         </button>
                     </div>
                 </div>
-
-                {/* --- SPECTATOR MODAL --- */}
-                <AnimatePresence>
-                    {showSpectatorModal && (
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-6"
-                        >
-                            <motion.div 
-                                initial={{ scale: 0.9, y: 20 }}
-                                animate={{ scale: 1, y: 0 }}
-                                className="bg-[#FF6600] border-2 border-white p-6 w-full max-w-sm text-center shadow-2xl relative"
-                            >
-                                <AlertCircle className="w-12 h-12 text-white mx-auto mb-4" />
-                                <h3 className="font-display font-black text-2xl text-white uppercase leading-none mb-2">
-                                    UNREGISTERED<br/>USER
-                                </h3>
-                                <p className="font-mono text-xs text-white/90 leading-relaxed mb-6 border-y border-white/20 py-3">
-                                    That phone number is not on the guest list. You can enter in <strong>Spectator Mode</strong> (No Bidding), or retry.
-                                </p>
-                                
-                                <div className="flex flex-col gap-3">
-                                    <button 
-                                        onClick={confirmSpectatorJoin}
-                                        className="w-full py-3 bg-white text-[#FF6600] font-black uppercase tracking-widest text-xs hover:bg-zinc-100 transition-colors"
-                                    >
-                                        Yes, Enter as Spectator
-                                    </button>
-                                    
-                                    <button 
-                                        onClick={() => setShowSpectatorModal(false)}
-                                        className="w-full py-3 border border-white text-white font-bold uppercase tracking-widest text-xs hover:bg-white/10 transition-colors"
-                                    >
-                                        Retry Login
-                                    </button>
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
 
             </motion.div>
         )}

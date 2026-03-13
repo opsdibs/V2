@@ -18,6 +18,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [hostBanned, setHostBannedState] = useState(false);       // CHANGE HERE: drive active UI state
 
   const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  const PRESENCE_TTL_MS = 45000;
 
 
   // changes: fetch session records, grouped by userId
@@ -58,6 +59,26 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     return [...new Set([indexed, ...(tracked || [])].filter(Boolean))];
   };
 
+  const getPresenceMeta = (presence) => {
+    if (!presence || typeof presence !== "object") return null;
+    if (typeof presence.lastChanged === "number") {
+      return {
+        lastChanged: presence.lastChanged,
+        state: presence.state || "online"
+      };
+    }
+    // Support legacy per-connection shape: viewers/{uid}/{connId}
+    let latest = null;
+    Object.values(presence).forEach((entry) => {
+      const lastChanged = Number(entry?.lastChanged) || 0;
+      if (!lastChanged) return;
+      if (!latest || lastChanged > latest.lastChanged) {
+        latest = { lastChanged, state: entry?.state || "online" };
+      }
+    });
+    return latest;
+  };
+
   // 1. Fetch & Process Audience List
   useEffect(() => {
     const usersRef = ref(db, `rooms/${roomId}/audience_index`); //EFF CHANGE
@@ -84,14 +105,16 @@ return onValue(usersRef, (snapshot) => { //EFF CHANGE
       const userSessions = sessionsByUser[user.userId] || [];
       const resolvedSessionKey = user.lastSessionKey || user.dbKey || userSessions[0]?.sessionKey || null;
       const activeSession = userSessions.find((s) => s.sessionKey === resolvedSessionKey) || userSessions[0];
-      const presence = onlineData[user.userId];
+      const presenceMeta = getPresenceMeta(onlineData[user.userId]);
+      const now = Date.now();
+      const isOnline = !!presenceMeta && (now - presenceMeta.lastChanged <= PRESENCE_TTL_MS);
       return {
         ...user,
         dbKey: resolvedSessionKey,
         sessionKeys: userSessions.map((s) => s.sessionKey),
         restrictions: activeSession?.restrictions || { isMuted: false, isBidBanned: false, isKicked: false }, // changes: real restriction state
-        isOnline: !!presence,
-        presenceState: presence ? presence.state : 'offline'
+        isOnline,
+        presenceState: isOnline ? (presenceMeta?.state || 'online') : 'offline'
       };
     })
     .sort((a, b) => {
@@ -141,10 +164,14 @@ return onValue(usersRef, (snapshot) => { //EFF CHANGE
   // 3. Fetch Online Presence (Real-time)
   useEffect(() => {
     const presenceRef = ref(db, `rooms/${roomId}/viewers`);
-    return onValue(presenceRef, (snapshot) => {
-      const data = snapshot.val();
-      setOnlineData(data || {}); // Store the whole object, not just keys
-    });
+    return onValue(
+      presenceRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        setOnlineData(data || {}); // Store the whole object, not just keys
+      },
+      () => setOnlineData({})
+    );
   }, [roomId]);
 
   // CHANGE HERE: listen to host moderation flags so buttons can show active/inactive
@@ -228,11 +255,12 @@ useEffect(() => {
   
   // Calculate Stats on the fly based on the processed 'users' list
   const stats = users.reduce((acc, user) => {
+      const isActive = user.isOnline && user.presenceState !== 'idle';
       if (user.role === 'spectator') {
-          user.isOnline ? acc.activeSpectators++ : acc.inactiveSpectators++;
+          isActive ? acc.activeSpectators++ : acc.inactiveSpectators++;
       } else {
           // Defaults to Audience (Bidders)
-          user.isOnline ? acc.activeAudience++ : acc.inactiveAudience++;
+          isActive ? acc.activeAudience++ : acc.inactiveAudience++;
       }
       return acc;
   }, { activeAudience: 0, inactiveAudience: 0, activeSpectators: 0, inactiveSpectators: 0 });

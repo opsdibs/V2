@@ -27,6 +27,8 @@ const INVENTORY = parseInventory();
 
 const AUCTION_DURATION_SECONDS = 20;
 const LIVE_SELL_DURATION_SECONDS = 20;
+const PRESENCE_HEARTBEAT_MS = 20000;
+const PRESENCE_TTL_MS = 45000;
 
 const glassSurface =
   "relative overflow-hidden rounded-2xl " +
@@ -79,6 +81,7 @@ const chatContainerRef = useRef(null);
 	const currentBidRef = useRef(0);
 	const bidIncrementRef = useRef(10); // BIDINCREMENt CHANGE
 	const isLiveSellActiveRef = useRef(false);
+  const presenceStatusRef = useRef("online");
 
 
 // CHANGE: ref holds the same snapshot as selectedItem (not just an id)
@@ -192,9 +195,42 @@ const currentItemRef = useRef(null);
     });
   });
 
-  const unsubViewers = onValue(viewersRef, (snapshot) => {
-    setViewerCount(snapshot.size);
-  });
+  const getPresenceMeta = (presence) => {
+    if (!presence || typeof presence !== "object") return null;
+    if (typeof presence.lastChanged === "number") {
+      return {
+        lastChanged: presence.lastChanged,
+        state: presence.state || "online"
+      };
+    }
+    // Support legacy per-connection shape: viewers/{uid}/{connId}
+    let latest = null;
+    Object.values(presence).forEach((entry) => {
+      const lastChanged = Number(entry?.lastChanged) || 0;
+      if (!lastChanged) return;
+      if (!latest || lastChanged > latest.lastChanged) {
+        latest = { lastChanged, state: entry?.state || "online" };
+      }
+    });
+    return latest;
+  };
+
+  const unsubViewers = onValue(
+    viewersRef,
+    (snapshot) => {
+      const data = snapshot.val() || {};
+      const now = Date.now();
+      let count = 0;
+      Object.entries(data).forEach(([uid, presence]) => {
+        if (uid === "HOST" || uid === "MODERATOR") return;
+        const meta = getPresenceMeta(presence);
+        if (!meta) return;
+        if (now - meta.lastChanged <= PRESENCE_TTL_MS) count += 1;
+      });
+      setViewerCount(count);
+    },
+    () => setViewerCount(0)
+  );
 
   const unsubItem = onValue(itemRef, (snapshot) => {
     const raw = snapshot.val();
@@ -288,14 +324,16 @@ const currentItemRef = useRef(null);
 
   // --- PRESENCE SYSTEM (UPDATED: VISIBILITY TRACKING) ---
   useEffect(() => {
-      if (!isHost && persistentUserId) {
+      if (persistentUserId) {
           console.log(`[Presence] Tracking for ${persistentUserId}`);
           const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${persistentUserId}`);
+          const connectedRef = ref(db, ".info/connected");
           
           // Helper: Updates status in DB
           // We now store an OBJECT instead of just 'true'
           const updateStatus = (status) => {
           const now = Date.now();
+          presenceStatusRef.current = status;
 
           set(myPresenceRef, {
             state: status,
@@ -310,6 +348,13 @@ const currentItemRef = useRef(null);
 
           // 1. Initial Set: Online
           updateStatus('online');
+
+          // Re-arm onDisconnect on every reconnect
+          const unsubConnected = onValue(connectedRef, (snap) => {
+              if (snap.val() === true) {
+                  onDisconnect(myPresenceRef).remove();
+              }
+          });
           
           // 2. Listener: Detect Tab Switching (True Attention)
           const handleVisibility = () => {
@@ -321,19 +366,35 @@ const currentItemRef = useRef(null);
           };
 
           document.addEventListener("visibilitychange", handleVisibility);
+
+          // 3. Heartbeat to keep presence fresh
+          const heartbeat = setInterval(() => {
+              updateStatus(presenceStatusRef.current || "online");
+          }, PRESENCE_HEARTBEAT_MS);
+
+          // 4. Best-effort immediate cleanup when the tab closes or navigates away
+          const handlePageHide = () => {
+              remove(myPresenceRef).catch(() => {});
+          };
+          window.addEventListener("pagehide", handlePageHide);
+          window.addEventListener("beforeunload", handlePageHide);
           
-          // 3. Auto-remove on disconnect (Network Loss/Close)
+          // 5. Auto-remove on disconnect (Network Loss/Close)
           onDisconnect(myPresenceRef).remove();
           
-          // 4. Cleanup
+          // 6. Cleanup
           return () => { 
+              clearInterval(heartbeat);
               document.removeEventListener("visibilitychange", handleVisibility);
+              window.removeEventListener("pagehide", handlePageHide);
+              window.removeEventListener("beforeunload", handlePageHide);
+              unsubConnected();
     
           };
-      } else if (!isHost && !persistentUserId) {
+      } else {
           console.warn("[Presence] No User ID found in URL. Tracking skipped.");
       }
-  }, [roomId, isHost, persistentUserId]);
+  }, [roomId, persistentUserId]);
 
   useEffect(() => {
       const activeMode = isAuctionActive ? 'auction' : isLiveSellActive ? 'live_sell' : null;
