@@ -49,11 +49,12 @@ const analyze = async () => {
         }
 
         // --- 2. FETCH DATA ---
-        const [configSnap, metaSnap, audienceSnap, historySnap, analyticsSnap, chatSnap] = await Promise.all([
+        const [configSnap, metaSnap, audienceSnap, historySnap, liveSellSnap, analyticsSnap, chatSnap] = await Promise.all([
             get(ref(db, `event_config`)),
             get(ref(db, `rooms/${roomId}/metadata`)),
             get(ref(db, `audience_data/${roomId}`)),
             get(ref(db, `rooms/${roomId}/auctionHistory`)),
+            get(ref(db, `rooms/${roomId}/liveSellHistory`)),
             get(ref(db, `analytics/${roomId}`)),
             get(ref(db, `rooms/${roomId}/chat`))
         ]);
@@ -112,7 +113,7 @@ const analyze = async () => {
         rawChat.forEach(msg => {
             if (msg.type === 'bid' && msg.timestamp >= START_TIME && msg.timestamp <= END_TIME) {
                 // Regex: Grab everything before " bid ₹"
-                const match = msg.text.match(/^(.*?) bid ₹/);
+                const match = msg.text.match(/^(.*?) bid (?:\u20B9|INR)\s*/i);
                 const extractedUser = match ? match[1].trim() : null; // Added trim()
                 
                 if (extractedUser) {
@@ -146,7 +147,39 @@ const analyze = async () => {
         const eventHistory = rawHistory.filter(h => h.timestamp >= START_TIME && h.timestamp <= END_TIME);
         const soldItems = eventHistory.filter(h => h.winner && h.winner !== "Nobody");
         const unsoldItems = eventHistory.filter(h => !h.winner || h.winner === "Nobody");
-        const totalRevenue = soldItems.reduce((sum, h) => sum + (h.finalPrice || 0), 0);
+        const auctionRevenue = soldItems.reduce((sum, h) => sum + (h.finalPrice || 0), 0);
+
+        // --- 7b. LIVE SELL ANALYSIS ---
+        const rawLiveSellHistory = liveSellSnap.exists() ? Object.values(liveSellSnap.val()) : [];
+        const liveSellHistory = rawLiveSellHistory.filter(h => h.timestamp >= START_TIME && h.timestamp <= END_TIME);
+        const liveSellItemMap = new Map();
+        let totalLiveSellBookings = 0;
+        let liveSellRevenue = 0;
+
+        liveSellHistory.forEach(session => {
+            const itemName = (session?.item && session.item.name) ? session.item.name : (session.itemName || "Unknown Item");
+            const sessionPrice = Number(session?.price) || 0;
+            const bookings = Array.isArray(session?.bookings) ? session.bookings : [];
+
+            const bookingRevenue = bookings.reduce((sum, b) => {
+                const price = Number(b?.price);
+                return sum + (Number.isFinite(price) ? price : sessionPrice);
+            }, 0);
+
+            const bookingCount = bookings.length;
+            totalLiveSellBookings += bookingCount;
+            liveSellRevenue += bookingRevenue;
+
+            const agg = liveSellItemMap.get(itemName) || { itemName, bookingsCount: 0, revenue: 0 };
+            agg.bookingsCount += bookingCount;
+            agg.revenue += bookingRevenue;
+            liveSellItemMap.set(itemName, agg);
+        });
+
+        const liveSellItemStats = Array.from(liveSellItemMap.values())
+            .sort((a, b) => (b.bookingsCount - a.bookingsCount) || (b.revenue - a.revenue));
+
+        const totalRevenue = auctionRevenue + liveSellRevenue;
 
         // --- 8. PRICE INCREASES ---
         let totalPctIncrease = 0;
@@ -163,8 +196,21 @@ const analyze = async () => {
 
         // --- 9. AVG VIEWERS ---
         let totalSessionTimeMs = 0;
-        const sessions = rawEvents.filter(e => e.event === 'SESSION_END' || e.eventType === 'SESSION_END'); 
-        sessions.forEach(s => { if (s.duration) totalSessionTimeMs += s.duration; });
+        const sessionRows = analyticsData.sessions ? Object.values(analyticsData.sessions) : [];
+
+        sessionRows
+            .filter(s => s && (s.role === 'audience' || s.role === 'spectator'))
+            .forEach(s => {
+                const start = Number(s.startTime);
+                const end = Number(s.endTime) || END_TIME;
+                if (!start || !end) return;
+                const effectiveStart = Math.max(start, START_TIME);
+                const effectiveEnd = Math.min(end, END_TIME);
+                if (effectiveEnd > effectiveStart) {
+                    totalSessionTimeMs += (effectiveEnd - effectiveStart);
+                }
+            });
+
         const eventDurationMinutes = (END_TIME - START_TIME) / 1000 / 60;
         const avgViewers = eventDurationMinutes > 0 ? Math.round((totalSessionTimeMs / 1000 / 60) / eventDurationMinutes) : 0;
 
@@ -235,7 +281,7 @@ const analyze = async () => {
 
     <div class="grid">
         <div class="card"><div class="lbl">Real Users</div><div class="val">${realUserCount}</div></div>
-        <div class="card"><div class="lbl">Items Sold</div><div class="val">${eventHistory.length > 0 ? Math.round((soldItems.length / eventHistory.length) * 100) : 0}%</div></div>
+        <div class="card"><div class="lbl">Auction Items Sold</div><div class="val">${eventHistory.length > 0 ? Math.round((soldItems.length / eventHistory.length) * 100) : 0}%</div></div>
         <div class="card"><div class="lbl">Total Bids</div><div class="val">${validBids.length}</div></div>
         <div class="card"><div class="lbl">Avg Viewers (Live)</div><div class="val">${avgViewers}</div></div>
         
@@ -243,6 +289,9 @@ const analyze = async () => {
         <div class="card"><div class="lbl">Highest Increase</div><div class="val positive">+${Math.round(maxPctIncrease)}%</div></div>
         <div class="card"><div class="lbl">Active Bidders</div><div class="val">${activeBidderCount} <span style="color:#666; font-size:12px">/ ${totalBidders}</span></div></div>
         <div class="card"><div class="lbl">Items Showcased</div><div class="val">${eventHistory.length}</div></div>
+        <div class="card"><div class="lbl">Live Sell Sessions</div><div class="val">${liveSellHistory.length}</div></div>
+        <div class="card"><div class="lbl">Live Sell Bookings</div><div class="val">${totalLiveSellBookings}</div></div>
+        <div class="card"><div class="lbl">Live Sell Revenue</div><div class="val highlight">INR ${liveSellRevenue.toLocaleString()}</div></div>
     </div>
 
     <div class="box" style="margin-bottom: 20px;">
@@ -280,6 +329,28 @@ const analyze = async () => {
                       return `<tr><td>${i.itemName}</td><td>₹${price}</td></tr>`;
                   }).join('')
                 }
+            </table>
+        </div>
+    </div>
+
+    <div class="section-grid">
+        <div class="box">
+            <h2>Live Sell Bookings (Per Item)</h2>
+            <table>
+                <tr><th>Item</th><th>Bookings</th><th>Revenue</th></tr>
+                ${liveSellItemStats.length === 0
+                    ? '<tr><td colspan="3" style="text-align:center; padding:20px; color:#555">No live sell bookings</td></tr>'
+                    : liveSellItemStats.map(i => `<tr><td>${i.itemName}</td><td>${i.bookingsCount}</td><td>INR ${i.revenue.toLocaleString()}</td></tr>`).join('')
+                }
+            </table>
+        </div>
+        <div class="box">
+            <h2>Live Sell Summary</h2>
+            <table>
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Total Live Sell Sessions</td><td>${liveSellHistory.length}</td></tr>
+                <tr><td>Total Live Sell Bookings</td><td>${totalLiveSellBookings}</td></tr>
+                <tr><td>Live Sell Revenue</td><td>INR ${liveSellRevenue.toLocaleString()}</td></tr>
             </table>
         </div>
     </div>
