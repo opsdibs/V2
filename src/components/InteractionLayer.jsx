@@ -705,10 +705,10 @@ const openUpiPayment = ({ upiId, payeeName, amount, note }) => {
   const isIOS = /iP(hone|ad|od)/.test(ua);
   const isAndroid = /Android/i.test(ua);
 
-  // iOS Safari often shows "address invalid" for custom schemes if the app isn't resolvable.
-  // Use the generic UPI link on iOS; Google Pay will still open if installed.
   if (isIOS) {
-    window.location.href = upiLink;
+    const gpayLink = buildUpiDeepLink({ upiId, payeeName, amount, note, scheme: "gpay", path: "upi/pay" });
+    // iOS: open Google Pay directly (no fallback to avoid "invalid address" popups)
+    window.location.href = gpayLink || upiLink;
     return;
   }
 
