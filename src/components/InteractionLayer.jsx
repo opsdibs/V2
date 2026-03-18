@@ -62,6 +62,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [liveSellEndTime, setLiveSellEndTime] = useState(0);
   const [liveSellPrice, setLiveSellPrice] = useState(0);
   const [showModePicker, setShowModePicker] = useState(false);
+  const [upiConfig, setUpiConfig] = useState({ upiId: "", payeeName: "", notePrefix: "" });
 
   // CHANGE: current item becomes a snapshot object (static/custom)
   const [selectedItem, setSelectedItem] = useState(null); // { kind: 'static'|'custom', id, name, desc, startPrice }
@@ -112,6 +113,7 @@ const currentItemRef = useRef(null);
   const viewersRef = ref(db, `rooms/${roomId}/viewers`);
   const itemRef = ref(db, `rooms/${roomId}/currentItem`);
   const bidIncrementConfigRef = ref(db, `event_config/bid_increment`); // BIDINCREMENt CHANGE
+  const upiConfigRef = ref(db, `event_config/upi`);
 
   // CHANGE: custom items live in DB per-room
   const customItemsRef = ref(db, `rooms/${roomId}/customItems`);
@@ -192,6 +194,15 @@ const currentItemRef = useRef(null);
       const minNextBid = currentBidRef.current + nextIncrement; // BIDINCREMENt CHANGE
       if (!isAuctionActiveRef.current) return minNextBid; // BIDINCREMENt CHANGE
       return prev < minNextBid ? minNextBid : prev; // BIDINCREMENt CHANGE
+    });
+  });
+
+  const unsubUpiConfig = onValue(upiConfigRef, (snapshot) => {
+    const data = snapshot.val() || {};
+    setUpiConfig({
+      upiId: typeof data?.upiId === "string" ? data.upiId.trim() : "",
+      payeeName: typeof data?.payeeName === "string" ? data.payeeName.trim() : "",
+      notePrefix: typeof data?.notePrefix === "string" ? data.notePrefix.trim() : "",
     });
   });
 
@@ -298,6 +309,7 @@ const currentItemRef = useRef(null);
     unsubPinned();
     unsubBid();
     unsubBidIncrement(); // BIDINCREMENt CHANGE
+    unsubUpiConfig();
     unsubAuction();
     unsubSaleMode();
     unsubLiveSell();
@@ -656,6 +668,43 @@ const getPhoneFromUserId = (userId) => {
   return match ? match[1] : "N/A";
 };
 
+const buildUpiDeepLink = ({ upiId, payeeName, amount, note, scheme = "upi", path = "pay" }) => {
+  const cleanedUpiId = typeof upiId === "string" ? upiId.trim() : "";
+  if (!cleanedUpiId) return "";
+
+  const params = new URLSearchParams();
+  params.set("pa", cleanedUpiId);
+  if (payeeName) params.set("pn", payeeName);
+  if (note) params.set("tn", note);
+  if (Number.isFinite(amount) && amount > 0) params.set("am", Number(amount).toFixed(2));
+  params.set("cu", "INR");
+
+  return `${scheme}://${path}?${params.toString()}`;
+};
+
+const openUpiPayment = ({ upiId, payeeName, amount, note }) => {
+  const upiLink = buildUpiDeepLink({ upiId, payeeName, amount, note, scheme: "upi", path: "pay" });
+  if (!upiLink) {
+    alert("Payment link not configured. Please contact the host.");
+    return;
+  }
+
+  const gpayLink = buildUpiDeepLink({ upiId, payeeName, amount, note, scheme: "gpay", path: "upi/pay" });
+
+  // Try Google Pay first, then fall back to generic UPI if it doesn't open
+  if (gpayLink) {
+    window.location.href = gpayLink;
+    window.setTimeout(() => {
+      if (document.visibilityState === "visible") {
+        window.location.href = upiLink;
+      }
+    }, 800);
+    return;
+  }
+
+  window.location.href = upiLink;
+};
+
 const placeBid = () => {
   if (!isAuctionActive) return;
   triggerHaptic();
@@ -766,6 +815,15 @@ const bookLiveSell = async () => {
   push(ref(db, `rooms/${roomId}/chat`), {
     text: `${booking.user} booked ${itemSnapshot.name} for ₹${price}`,
     type: 'booking'
+  });
+
+  const notePrefix = upiConfig.notePrefix || "DIBS Live Sell";
+  const note = `${notePrefix}: ${itemSnapshot?.name || "Item"}`;
+  openUpiPayment({
+    upiId: upiConfig.upiId,
+    payeeName: upiConfig.payeeName,
+    amount: price,
+    note
   });
 };
   const startAuction = () => {
