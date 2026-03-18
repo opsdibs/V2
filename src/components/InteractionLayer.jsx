@@ -668,7 +668,7 @@ const getPhoneFromUserId = (userId) => {
   return match ? match[1] : "N/A";
 };
 
-const buildUpiDeepLink = ({ upiId, payeeName, amount, note, scheme = "upi", path = "pay" }) => {
+const buildUpiQuery = ({ upiId, payeeName, amount, note }) => {
   const cleanedUpiId = typeof upiId === "string" ? upiId.trim() : "";
   if (!cleanedUpiId) return "";
 
@@ -679,7 +679,19 @@ const buildUpiDeepLink = ({ upiId, payeeName, amount, note, scheme = "upi", path
   if (Number.isFinite(amount) && amount > 0) params.set("am", Number(amount).toFixed(2));
   params.set("cu", "INR");
 
-  return `${scheme}://${path}?${params.toString()}`;
+  return params.toString();
+};
+
+const buildUpiDeepLink = ({ upiId, payeeName, amount, note, scheme = "upi", path = "pay" }) => {
+  const query = buildUpiQuery({ upiId, payeeName, amount, note });
+  if (!query) return "";
+  return `${scheme}://${path}?${query}`;
+};
+
+const buildAndroidGpayIntent = ({ upiId, payeeName, amount, note }) => {
+  const query = buildUpiQuery({ upiId, payeeName, amount, note });
+  if (!query) return "";
+  return `intent://pay?${query}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
 };
 
 const openUpiPayment = ({ upiId, payeeName, amount, note }) => {
@@ -691,6 +703,7 @@ const openUpiPayment = ({ upiId, payeeName, amount, note }) => {
 
   const ua = navigator.userAgent || "";
   const isIOS = /iP(hone|ad|od)/.test(ua);
+  const isAndroid = /Android/i.test(ua);
 
   // iOS Safari often shows "address invalid" for custom schemes if the app isn't resolvable.
   // Use the generic UPI link on iOS; Google Pay will still open if installed.
@@ -699,10 +712,15 @@ const openUpiPayment = ({ upiId, payeeName, amount, note }) => {
     return;
   }
 
-  const gpayLink = buildUpiDeepLink({ upiId, payeeName, amount, note, scheme: "gpay", path: "upi/pay" });
+  if (!isAndroid) {
+    window.location.href = upiLink;
+    return;
+  }
 
-  // Android: Try Google Pay first, then fall back to generic UPI if it doesn't open
-  window.location.href = gpayLink || upiLink;
+  const gpayIntent = buildAndroidGpayIntent({ upiId, payeeName, amount, note });
+
+  // Android: Try Google Pay via Intent, then fall back to generic UPI if it doesn't open
+  window.location.href = gpayIntent || upiLink;
   window.setTimeout(() => {
     if (document.visibilityState === "visible") {
       window.location.href = upiLink;
