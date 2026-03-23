@@ -36,6 +36,19 @@ const analyze = async () => {
     console.log(`\n🔍 ANALYZING ROOM: [ ${roomId} ]\n` + "=".repeat(50));
 
     try {
+        const parseTime = (value) => {
+            if (value === undefined || value === null || value === '') return null;
+            if (value instanceof Date) return value.getTime();
+            const asNumber = Number(value);
+            if (Number.isFinite(asNumber)) {
+                return asNumber < 1e12 ? asNumber * 1000 : asNumber;
+            }
+            const parsed = new Date(value).getTime();
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const isValidTime = (value) => Number.isFinite(value) && value > 0;
+
         // --- 1. LOAD INVENTORY ---
         const inventoryPath = path.join(__dirname, 'src', 'inventory.csv');
         let inventoryMap = new Map();
@@ -59,23 +72,69 @@ const analyze = async () => {
             get(ref(db, `rooms/${roomId}/chat`))
         ]);
 
+        const rawAudience = audienceSnap.exists() ? Object.values(audienceSnap.val()) : [];
+        const analyticsData = analyticsSnap.exists() ? analyticsSnap.val() : {};
+        const rawEvents = analyticsData.events ? Object.values(analyticsData.events) : [];
+        const rawChat = chatSnap.exists() ? Object.values(chatSnap.val()) : [];
+        const rawHistory = historySnap.exists() ? Object.values(historySnap.val()) : [];
+        const rawLiveSellHistory = liveSellSnap.exists() ? Object.values(liveSellSnap.val()) : [];
+        const sessionRows = analyticsData.sessions ? Object.values(analyticsData.sessions) : [];
+
         // --- 3. DETERMINE WINDOW ---
-        let START_TIME, END_TIME;
+        let START_TIME = null;
+        let END_TIME = null;
         if (manualStart && manualEnd) {
-            START_TIME = new Date(manualStart).getTime();
-            END_TIME = new Date(manualEnd).getTime();
+            START_TIME = parseTime(manualStart);
+            END_TIME = parseTime(manualEnd);
         } else if (metaSnap.exists()) {
             const meta = metaSnap.val();
-            START_TIME = meta.startTime;
-            END_TIME = meta.endTime;
+            START_TIME = parseTime(meta.startTime);
+            END_TIME = parseTime(meta.endTime);
         } else {
             const config = configSnap.exists() ? configSnap.val() : {};
-            START_TIME = config.startTime ? new Date(config.startTime).getTime() : 0;
-            END_TIME = config.endTime ? new Date(config.endTime).getTime() : Date.now();
+            START_TIME = parseTime(config.startTime);
+            END_TIME = parseTime(config.endTime) || Date.now();
+        }
+
+        const candidateTimes = [];
+        const pushTime = (value) => {
+            const t = parseTime(value);
+            if (isValidTime(t)) candidateTimes.push(t);
+        };
+        rawHistory.forEach(h => pushTime(h?.timestamp));
+        rawLiveSellHistory.forEach(h => pushTime(h?.timestamp));
+        rawEvents.forEach(e => pushTime(e?.timestamp));
+        rawChat.forEach(m => pushTime(m?.timestamp));
+        rawAudience.forEach(u => pushTime(u?.joinedAt));
+        sessionRows.forEach(s => {
+            pushTime(s?.startTime);
+            pushTime(s?.endTime);
+        });
+
+        const hasValidWindow = isValidTime(START_TIME) && isValidTime(END_TIME);
+        if (!hasValidWindow || END_TIME <= START_TIME) {
+            if (candidateTimes.length > 0) {
+                START_TIME = Math.min(...candidateTimes);
+                END_TIME = Math.max(...candidateTimes);
+                console.log(`Window adjusted to data range: ${new Date(START_TIME).toLocaleString()} - ${new Date(END_TIME).toLocaleString()}`);
+            } else if (isValidTime(START_TIME) && isValidTime(END_TIME) && END_TIME < START_TIME) {
+                const tmp = START_TIME;
+                START_TIME = END_TIME;
+                END_TIME = tmp;
+                console.log("Window was inverted; swapped start/end.");
+            } else {
+                const fallbackEnd = Date.now();
+                const fallbackStart = fallbackEnd - (2 * 60 * 60 * 1000);
+                START_TIME = isValidTime(START_TIME) ? START_TIME : fallbackStart;
+                END_TIME = isValidTime(END_TIME) ? END_TIME : fallbackEnd;
+                if (END_TIME <= START_TIME) {
+                    END_TIME = START_TIME + 60 * 60 * 1000;
+                }
+                console.log("Window missing/invalid; using fallback range.");
+            }
         }
 
         // --- 4. AUDIENCE ANALYSIS ---
-        const rawAudience = audienceSnap.exists() ? Object.values(audienceSnap.val()) : [];
         const uniqueUsers = new Map();
         
         rawAudience.forEach(user => {
@@ -93,10 +152,6 @@ const analyze = async () => {
         const totalSpectators = Array.from(uniqueUsers.values()).filter(u => u.role === 'spectator').length;
 
         // --- 5. BIDS ANALYSIS (MULTI-SOURCE) ---
-        const analyticsData = analyticsSnap.exists() ? analyticsSnap.val() : {};
-        const rawEvents = analyticsData.events ? Object.values(analyticsData.events) : []; 
-        const rawChat = chatSnap.exists() ? Object.values(chatSnap.val()) : [];
-
         // Gather ALL valid bids
         const validBids = [];
         
@@ -143,14 +198,33 @@ const analyze = async () => {
         const passiveBidderCount = Math.max(0, totalBidders - activeBidderCount); 
 
         // --- 7. SALES & UNSOLD ---
-        const rawHistory = historySnap.exists() ? Object.values(historySnap.val()) : [];
         const eventHistory = rawHistory.filter(h => h.timestamp >= START_TIME && h.timestamp <= END_TIME);
         const soldItems = eventHistory.filter(h => h.winner && h.winner !== "Nobody");
         const unsoldItems = eventHistory.filter(h => !h.winner || h.winner === "Nobody");
         const auctionRevenue = soldItems.reduce((sum, h) => sum + (h.finalPrice || 0), 0);
+        const allItemNames = [];
+        const allItemSet = new Set();
+        const addItemName = (name) => {
+            if (!name) return;
+            if (allItemSet.has(name)) return;
+            allItemSet.add(name);
+            allItemNames.push(name);
+        };
+        if (inventoryMap.size > 0) {
+            inventoryMap.forEach((_, name) => addItemName(name));
+        }
+        eventHistory.forEach(h => addItemName(h.itemName || h?.item?.name));
+
+        const soldPriceByItem = new Map();
+        soldItems.forEach(item => {
+            const name = item.itemName || item?.item?.name;
+            if (!name) return;
+            const price = Number(item.finalPrice) || 0;
+            const prev = soldPriceByItem.get(name) || 0;
+            if (price > prev) soldPriceByItem.set(name, price);
+        });
 
         // --- 7b. LIVE SELL ANALYSIS ---
-        const rawLiveSellHistory = liveSellSnap.exists() ? Object.values(liveSellSnap.val()) : [];
         const liveSellHistory = rawLiveSellHistory.filter(h => h.timestamp >= START_TIME && h.timestamp <= END_TIME);
         const liveSellItemMap = new Map();
         let totalLiveSellBookings = 0;
@@ -196,7 +270,6 @@ const analyze = async () => {
 
         // --- 9. AVG VIEWERS ---
         let totalSessionTimeMs = 0;
-        const sessionRows = analyticsData.sessions ? Object.values(analyticsData.sessions) : [];
 
         sessionRows
             .filter(s => s && (s.role === 'audience' || s.role === 'spectator'))
@@ -312,10 +385,16 @@ const analyze = async () => {
 
     <div class="section-grid">
         <div class="box">
-            <h2>💰 Top Sales</h2>
+            <h2>Items & Sold Price</h2>
             <table>
                 <tr><th>Item</th><th>Sold Price</th></tr>
-                ${soldItems.sort((a,b) => b.finalPrice - a.finalPrice).slice(0,5).map(i => `<tr><td>${i.itemName}</td><td style="color:#FF6600">₹${i.finalPrice.toLocaleString()}</td></tr>`).join('')}
+                ${allItemNames.map(name => {
+                    const soldPrice = soldPriceByItem.get(name);
+                    if (Number.isFinite(soldPrice) && soldPrice > 0) {
+                        return `<tr><td>${name}</td><td style="color:#FF6600">₹${soldPrice.toLocaleString()}</td></tr>`;
+                    }
+                    return `<tr><td>${name}</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr>`;
+                }).join('')}
             </table>
         </div>
 
