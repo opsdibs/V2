@@ -127,7 +127,7 @@ const LoginScreen = () => {
             DIBS!
             </h1>
             <p className="text-sm font-bold tracking-[0.3em] text-white uppercase font-sans opacity-90">
-            ONE PIECE ONE CHANGE
+            ONE PIECE ONE CHANCE
             </p>
 
             <div className="w-full max-w-xs mt-12 space-y-6">
