@@ -25,10 +25,29 @@ const parseInventory = () => {
 
 const INVENTORY = parseInventory();
 
-const AUCTION_DURATION_SECONDS = 20;
-const LIVE_SELL_DURATION_SECONDS = 20;
+const DEFAULT_SALE_DURATION_SECONDS = 20;
 const PRESENCE_HEARTBEAT_MS = 20000;
 const PRESENCE_TTL_MS = 45000;
+
+const toNonNegativeInt = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return 0;
+  return Math.floor(num);
+};
+
+const resolveSaleDurationSeconds = (minutesRaw, secondsRaw) => {
+  const minutes = toNonNegativeInt(minutesRaw);
+  const seconds = toNonNegativeInt(secondsRaw);
+  const total = (minutes * 60) + seconds;
+  return total > 0 ? total : DEFAULT_SALE_DURATION_SECONDS;
+};
+
+const resolveOvertimeEnabled = (rawValue) => {
+  if (rawValue === undefined || rawValue === null) return true;
+  if (typeof rawValue === "boolean") return rawValue;
+  if (typeof rawValue === "string") return rawValue.trim().toLowerCase() === "true";
+  return Boolean(rawValue);
+};
 
 const glassSurface =
   "relative overflow-hidden rounded-2xl " +
@@ -55,7 +74,8 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [customItems, setCustomItems] = useState([]);
 
   const [isAuctionActive, setIsAuctionActive] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(AUCTION_DURATION_SECONDS);
+  const [timeLeft, setTimeLeft] = useState(DEFAULT_SALE_DURATION_SECONDS);
+  const [saleDurationSeconds, setSaleDurationSeconds] = useState(DEFAULT_SALE_DURATION_SECONDS);
   const [endTime, setEndTime] = useState(0);
   const [saleMode, setSaleMode] = useState("auction"); // 'auction' | 'live_sell'
   const [isLiveSellActive, setIsLiveSellActive] = useState(false);
@@ -76,12 +96,13 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemDesc, setNewItemDesc] = useState("");
   
-const chatEndRef = useRef(null);
-const chatContainerRef = useRef(null);
-	const isAuctionActiveRef = useRef(false);
-	const currentBidRef = useRef(0);
-	const bidIncrementRef = useRef(10); // BIDINCREMENt CHANGE
-	const isLiveSellActiveRef = useRef(false);
+	const chatEndRef = useRef(null);
+	const chatContainerRef = useRef(null);
+		const isAuctionActiveRef = useRef(false);
+		const currentBidRef = useRef(0);
+		const bidIncrementRef = useRef(10); // BIDINCREMENt CHANGE
+    const overtimeEnabledRef = useRef(true);
+		const isLiveSellActiveRef = useRef(false);
   const presenceStatusRef = useRef("online");
 
 
@@ -114,6 +135,7 @@ const currentItemRef = useRef(null);
   const itemRef = ref(db, `rooms/${roomId}/currentItem`);
   const bidIncrementConfigRef = ref(db, `event_config/bid_increment`); // BIDINCREMENt CHANGE
   const upiConfigRef = ref(db, `event_config/upi`);
+  const saleTimerConfigRef = ref(db, `event_config/sale_timer`);
 
   // CHANGE: custom items live in DB per-room
   const customItemsRef = ref(db, `rooms/${roomId}/customItems`);
@@ -204,6 +226,15 @@ const currentItemRef = useRef(null);
       payeeName: typeof data?.payeeName === "string" ? data.payeeName.trim() : "",
       notePrefix: typeof data?.notePrefix === "string" ? data.notePrefix.trim() : "",
     });
+  });
+
+  const unsubSaleTimer = onValue(saleTimerConfigRef, (snapshot) => {
+    const data = snapshot.val() || {};
+    const nextDuration = resolveSaleDurationSeconds(data?.minutes, data?.seconds);
+    setSaleDurationSeconds(nextDuration);
+
+    const nextOvertimeEnabled = resolveOvertimeEnabled(data?.overtime);
+    overtimeEnabledRef.current = nextOvertimeEnabled;
   });
 
   const getPresenceMeta = (presence) => {
@@ -310,6 +341,7 @@ const currentItemRef = useRef(null);
     unsubBid();
     unsubBidIncrement(); // BIDINCREMENt CHANGE
     unsubUpiConfig();
+    unsubSaleTimer();
     unsubAuction();
     unsubSaleMode();
     unsubLiveSell();
@@ -413,7 +445,7 @@ const currentItemRef = useRef(null);
       const activeEndTime = isAuctionActive ? endTime : liveSellEndTime;
 
       if (!activeMode || !activeEndTime) {
-          setTimeLeft(AUCTION_DURATION_SECONDS);
+          setTimeLeft(saleDurationSeconds);
           return;
       }
       const interval = setInterval(() => {
@@ -434,7 +466,7 @@ const currentItemRef = useRef(null);
           }
       }, 100);
       return () => clearInterval(interval);
-  }, [isAuctionActive, endTime, isLiveSellActive, liveSellEndTime, isHost]);
+  }, [isAuctionActive, endTime, isLiveSellActive, liveSellEndTime, isHost, saleDurationSeconds]);
 
   useEffect(() => {
       if (chatEndRef.current) {
@@ -766,7 +798,7 @@ const placeBid = () => {
     const now = Date.now();
     const timeRemaining = endTime - now;
 
-    if (timeRemaining <= 10000 && timeRemaining > 0) {
+    if (overtimeEnabledRef.current && timeRemaining <= 10000 && timeRemaining > 0) {
       const randomSeconds = Math.floor(Math.random() * 6);
       if (randomSeconds > 0) {
         const bonusTime = randomSeconds * 1000;
@@ -860,7 +892,7 @@ const bookLiveSell = async () => {
       return;
     }
 
-   const newEndTime = Date.now() + (AUCTION_DURATION_SECONDS * 1000);
+   const newEndTime = Date.now() + (saleDurationSeconds * 1000);
     const item = currentItemRef.current;
     const auctionId = push(ref(db, `rooms/${roomId}/auctionSessions`)).key;
 
@@ -946,7 +978,7 @@ const bookLiveSell = async () => {
       return;
     }
 
-    const newEndTime = Date.now() + (LIVE_SELL_DURATION_SECONDS * 1000);
+    const newEndTime = Date.now() + (saleDurationSeconds * 1000);
     const item = currentItemRef.current;
     const sessionId = push(ref(db, `rooms/${roomId}/liveSellSessions`)).key;
     const price = Number.isFinite(currentBidRef.current) ? currentBidRef.current : (Number(item?.startPrice) || 0);
@@ -1037,6 +1069,12 @@ const bookLiveSell = async () => {
   const liveSellDisplayPrice = isLiveSellActive ? liveSellPrice : currentBid;
   const saleModeButtonBottom = "calc(15.25rem + env(safe-area-inset-bottom))";
   const saleStartButtonBottom = "calc(2.25rem + env(safe-area-inset-bottom))";
+  const timeLeftMinutes = Math.floor(timeLeft / 60);
+  const timeLeftSeconds = timeLeft % 60;
+  const timeLeftLabel = `${timeLeftMinutes.toString().padStart(2, '0')}:${timeLeftSeconds.toString().padStart(2, '0')}`;
+  const saleDurationMinutes = Math.floor(saleDurationSeconds / 60);
+  const saleDurationSecondsOnly = saleDurationSeconds % 60;
+  const saleDurationLabel = `${saleDurationMinutes.toString().padStart(2, '0')}:${saleDurationSecondsOnly.toString().padStart(2, '0')}`;
   const bidderWrapClass = "flex flex-col items-center gap-2 transition-all duration-300";
   const liveSellButtonClass = isLiveSellActive
     ? 'w-full py-4 rounded-[2rem] transition-all flex flex-col items-center justify-center gap-1 bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer'
@@ -1072,7 +1110,7 @@ const bookLiveSell = async () => {
               </span>
             </button>
             <div className="text-[10px] text-zinc-500 text-center mt-2">
-              {LIVE_SELL_DURATION_SECONDS}s booking window
+              {saleDurationLabel} booking window
             </div>
           </div>
         </div>
@@ -1173,7 +1211,7 @@ const bookLiveSell = async () => {
           {isSaleActive && (
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-display text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}>
                   <Clock className="w-3 h-3" />
-                  <span>00:{timeLeft.toString().padStart(2, '0')}</span>
+                  <span>{timeLeftLabel}</span>
               </motion.div>
           )}
       </div>
