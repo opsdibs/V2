@@ -18,9 +18,7 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
   const [hostChatMuted, setHostChatMutedState] = useState(false); // CHANGE HERE: drive active UI state
   const [hostBanned, setHostBannedState] = useState(false);       // CHANGE HERE: drive active UI state
   const [roomBlockedPhones, setRoomBlockedPhones] = useState([]);
-  const [permaBlockedPhones, setPermaBlockedPhones] = useState([]);
   const [showBlockedUsers, setShowBlockedUsers] = useState(false);
-  const [blockedTab, setBlockedTab] = useState("room"); // room | perma
 
   const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
   const PRESENCE_TTL_MS = 45000;
@@ -206,17 +204,6 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     });
   }, [roomId]);
 
-  useEffect(() => {
-    const blockedRef = ref(db, `blocked_users`);
-    return onValue(blockedRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      const list = Object.entries(data)
-        .filter(([, val]) => !!val)
-        .map(([phone]) => phone)
-        .sort();
-      setPermaBlockedPhones(list);
-    });
-  }, [roomId]);
 
   // CHANGE HERE: listen to host moderation flags so buttons can show active/inactive
 useEffect(() => {
@@ -269,24 +256,6 @@ useEffect(() => {
       if (!window.confirm(`Unblock ${normalized} for this room?`)) return;
       await update(ref(db), {
         [`rooms/${roomId}/blocked_users/${normalized}`]: null,
-      });
-    };
-
-    const unblockPermaPhone = async (phone) => {
-      const normalized = normalizePhone(phone);
-      if (!normalized) return;
-      if (!window.confirm(`Remove permanent ban for ${normalized}?`)) return;
-      await update(ref(db), {
-        [`blocked_users/${normalized}`]: null,
-      });
-    };
-
-    const permaBanPhone = async (phone) => {
-      const normalized = normalizePhone(phone);
-      if (!normalized) return;
-      if (!window.confirm(`Permanently ban ${normalized}?`)) return;
-      await update(ref(db), {
-        [`blocked_users/${normalized}`]: true,
       });
     };
 
@@ -359,8 +328,7 @@ useEffect(() => {
   }, [audienceIndex]);
 
   const blockedList = useMemo(() => {
-    const source = blockedTab === "perma" ? permaBlockedPhones : roomBlockedPhones;
-    return source.map((rawPhone) => {
+    return roomBlockedPhones.map((rawPhone) => {
       const phone = normalizePhone(rawPhone) || rawPhone;
       const entry = phoneIndex[phone];
       const fallbackId = phone && /^\d{10}$/.test(phone) ? `USER-${phone}` : String(phone);
@@ -372,9 +340,7 @@ useEffect(() => {
         email: entry?.email || "",
       };
     });
-  }, [blockedTab, permaBlockedPhones, roomBlockedPhones, phoneIndex]);
-
-  const blockedCount = roomBlockedPhones.length + permaBlockedPhones.length;
+  }, [roomBlockedPhones, phoneIndex]);
 
   return (
     <div className="absolute top-20 left-4 right-4 bottom-32 bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden flex flex-col z-50 pointer-events-auto shadow-2xl">
@@ -416,9 +382,9 @@ useEffect(() => {
           >
             <UserCheck className="w-3.5 h-3.5" />
             Blocked
-            {blockedCount > 0 && (
+            {roomBlockedPhones.length > 0 && (
               <span className="ml-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center">
-                {blockedCount}
+                {roomBlockedPhones.length}
               </span>
             )}
           </button>
@@ -668,34 +634,13 @@ useEffect(() => {
               </button>
             </div>
 
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                onClick={() => setBlockedTab("room")}
-                className={`px-3 py-1 rounded text-[10px] font-bold uppercase ${
-                  blockedTab === "room" ? "bg-zinc-700 text-white" : "bg-black/40 text-zinc-400 hover:text-white"
-                }`}
-              >
-                Room ({roomBlockedPhones.length})
-              </button>
-              <button
-                onClick={() => setBlockedTab("perma")}
-                className={`px-3 py-1 rounded text-[10px] font-bold uppercase ${
-                  blockedTab === "perma" ? "bg-zinc-700 text-white" : "bg-black/40 text-zinc-400 hover:text-white"
-                }`}
-              >
-                Perma ({permaBlockedPhones.length})
-              </button>
-            </div>
-
             <div className="mt-3 space-y-2 max-h-72 overflow-y-auto">
               {blockedList.length === 0 && (
-                <div className="text-center text-zinc-500 text-xs py-6">
-                  {blockedTab === "perma" ? "No permanent bans." : "No room blocks."}
-                </div>
+                <div className="text-center text-zinc-500 text-xs py-6">No room blocks.</div>
               )}
               {blockedList.map((entry) => (
                 <div
-                  key={`${blockedTab}-${entry.phone}`}
+                  key={entry.phone}
                   className="flex items-center justify-between gap-3 p-2 rounded-lg bg-black/40 border border-white/10"
                 >
                   <div className="flex flex-col min-w-0">
@@ -710,21 +655,8 @@ useEffect(() => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {blockedTab === "room" && (
-                      <button
-                        onClick={() => permaBanPhone(entry.rawPhone)}
-                        className="px-2 py-1 text-[10px] uppercase font-bold rounded border border-red-500/40 text-red-400 hover:bg-red-500/10"
-                        title="Make Permanent Ban"
-                      >
-                        Perma
-                      </button>
-                    )}
                     <button
-                      onClick={() =>
-                        blockedTab === "perma"
-                          ? unblockPermaPhone(entry.rawPhone)
-                          : unblockRoomPhone(entry.rawPhone)
-                      }
+                      onClick={() => unblockRoomPhone(entry.rawPhone)}
                       className="px-2 py-1 text-[10px] uppercase font-bold rounded border border-green-500/40 text-green-400 hover:bg-green-500/10"
                       title="Unblock User"
                     >

@@ -28,6 +28,7 @@ const INVENTORY = parseInventory();
 const DEFAULT_SALE_DURATION_SECONDS = 20;
 const PRESENCE_HEARTBEAT_MS = 20000;
 const PRESENCE_TTL_MS = 45000;
+const MAX_BID_JUMP_RATIO = 0.2;
 
 const toNonNegativeInt = (value) => {
   const num = Number(value);
@@ -47,6 +48,12 @@ const resolveOvertimeEnabled = (rawValue) => {
   if (typeof rawValue === "boolean") return rawValue;
   if (typeof rawValue === "string") return rawValue.trim().toLowerCase() === "true";
   return Boolean(rawValue);
+};
+
+const getMaxAllowedBid = (currentBid) => {
+  const safeCurrent = Number.isFinite(Number(currentBid)) ? Number(currentBid) : 0;
+  if (safeCurrent <= 0) return 0;
+  return Math.floor(safeCurrent * (1 + MAX_BID_JUMP_RATIO));
 };
 
 const glassSurface =
@@ -202,7 +209,9 @@ const currentItemRef = useRef(null);
     setCustomBid((prev) => {
       const minNextBid = price + bidIncrementRef.current; // BIDINCREMENt CHANGE
       if (!isAuctionActiveRef.current) return minNextBid;
-      return prev < minNextBid ? minNextBid : prev;
+      const candidate = prev < minNextBid ? minNextBid : prev;
+      const maxAllowed = getMaxAllowedBid(price);
+      return Math.min(candidate, maxAllowed);
     });
   });
 
@@ -215,7 +224,9 @@ const currentItemRef = useRef(null);
     setCustomBid((prev) => { // BIDINCREMENt CHANGE
       const minNextBid = currentBidRef.current + nextIncrement; // BIDINCREMENt CHANGE
       if (!isAuctionActiveRef.current) return minNextBid; // BIDINCREMENt CHANGE
-      return prev < minNextBid ? minNextBid : prev; // BIDINCREMENt CHANGE
+      const candidate = prev < minNextBid ? minNextBid : prev; // BIDINCREMENt CHANGE
+      const maxAllowed = getMaxAllowedBid(currentBidRef.current);
+      return Math.min(candidate, maxAllowed);
     });
   });
 
@@ -684,11 +695,12 @@ const unpinMessage = () => {
 
 const handleIncrease = () => {
     triggerHaptic(); // <--- Add this
-    setCustomBid(prev => prev + bidIncrement); // BIDINCREMENt CHANGE
+    const maxAllowed = getMaxAllowedBid(currentBid);
+    setCustomBid(prev => Math.min(prev + bidIncrement, maxAllowed)); // BIDINCREMENt CHANGE
 };
 
 const handleDecrease = () => {
-    if (customBid > currentBid + bidIncrement) { // BIDINCREMENt CHANGE
+    if (customBid > currentBid) {
         triggerHaptic(); // <--- Add this
         setCustomBid(prev => prev - bidIncrement); // BIDINCREMENt CHANGE
     }
@@ -770,13 +782,18 @@ const placeBid = () => {
     return;
   }
 
+  const minAllowed = currentBid + bidIncrement;
+  const maxAllowed = getMaxAllowedBid(currentBid);
+  if (customBid < minAllowed || customBid > maxAllowed) return;
+
   const bidRef = ref(db, `rooms/${roomId}/bid`);
   const lastBidderRef = ref(db, `rooms/${roomId}/lastBidder`);
 
   runTransaction(bidRef, (current) => {
     const safeCurrent = current || 0;
     const minAllowed = safeCurrent + bidIncrementRef.current; // BIDINCREMENt CHANGE
-    if (customBid >= minAllowed) return customBid; // BIDINCREMENt CHANGE
+    const maxAllowed = getMaxAllowedBid(safeCurrent);
+    if (customBid >= minAllowed && customBid <= maxAllowed) return customBid; // BIDINCREMENt CHANGE
     return;
   }).then((result) => {
     if (!result.committed) return;
@@ -1096,6 +1113,12 @@ const bookLiveSell = async () => {
   const renderBidderControls = () => {
     if (!isBidder) return null;
 
+    const minAllowedBid = currentBid + bidIncrement;
+    const maxAllowedBid = getMaxAllowedBid(currentBid);
+    const canDecrease = isAuctionActive && customBid > currentBid;
+    const canIncrease = isAuctionActive && customBid < maxAllowedBid;
+    const canBid = isAuctionActive && customBid >= minAllowedBid && customBid <= maxAllowedBid;
+
     if (isLiveSellMode) {
       return (
         <div className={bidderWrapClass}>
@@ -1123,24 +1146,24 @@ const bookLiveSell = async () => {
           <div className="flex items-center justify-between px-2 py-2">
             <button 
               onClick={handleDecrease} 
-              disabled={!isAuctionActive || customBid <= currentBid + bidIncrement} // BIDINCREMENt CHANGE
-              className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + bidIncrement) ? 'cursor-not-allowed' : ''}`} // BIDINCREMENt CHANGE
+              disabled={!canDecrease} // BIDINCREMENt CHANGE
+              className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!canDecrease ? 'cursor-not-allowed' : ''}`} // BIDINCREMENt CHANGE
             >
               <Minus className="w-8 h-8" />
             </button>
 
             <button 
               onClick={handleIncrease} 
-              disabled={!isAuctionActive}
-              className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!isAuctionActive ? 'cursor-not-allowed' : ''}`}
+              disabled={!canIncrease}
+              className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!canIncrease ? 'cursor-not-allowed' : ''}`}
             >
               <Plus className="w-8 h-8" />
             </button>
           </div>
           <button 
             onClick={placeBid} 
-            disabled={!isAuctionActive}
-            className={auctionButtonClass}
+            disabled={!canBid}
+            className={canBid ? auctionButtonClass : 'w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center text-2xl sm:text-3xl bg-zinc-800 text-zinc-600 cursor-not-allowed'}
           >
             <span>{"\u20B9"}{customBid}</span>
           </button>
