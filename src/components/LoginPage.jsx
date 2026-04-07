@@ -345,8 +345,9 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
     logEvent(roomId, 'LOGIN_ATTEMPT', { email: inputEmail, phone: cleanPhone });
 
     try {
-  const [blockSnap, testSnapshot, configSnap, guestSnap] = await Promise.all([ //EFF CHANGE
+  const [blockSnap, roomBlockSnap, testSnapshot, configSnap, guestSnap] = await Promise.all([ //EFF CHANGE
     get(ref(db, `blocked_users/${cleanPhone}`)),
+    get(ref(db, `rooms/${roomId}/blocked_users/${cleanPhone}`)),
     get(ref(db, `test_allowed_guests/${cleanPhone}`)),
     get(ref(db, "event_config")),
     get(ref(db, `allowed_guests/${cleanPhone}`)),
@@ -356,6 +357,12 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
   if (blockSnap.exists()) {
     logEvent(roomId, 'LOGIN_BLOCKED', { phone: cleanPhone });
     setError("ACCESS DENIED. You are blocked.");
+    setLoading(false);
+    return;
+  }
+  if (roomBlockSnap.exists()) {
+    logEvent(roomId, 'LOGIN_BLOCKED_ROOM', { phone: cleanPhone });
+    setError("ACCESS DENIED. You are blocked from this room.");
     setLoading(false);
     return;
   }
@@ -427,6 +434,11 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
         // If no username passed (e.g. Host), default to role
         const finalName = username || role.toUpperCase();
 
+        const indexRef = ref(db, `rooms/${roomId}/audience_index/${uId}`); //EFF CHANGE
+        const indexSnap = await get(indexRef); //EFF CHANGE
+        const persistedRestrictions = indexSnap.exists() ? (indexSnap.val()?.restrictions || {}) : {};
+        const firstSeen = indexSnap.exists() ? indexSnap.val().firstSeen : Date.now(); //EFF CHANGE
+
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
             email: mail, 
@@ -435,11 +447,12 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
             userId: uId, 
             username: finalName, // <--- SAVE TO DB
             joinedAt: Date.now(),
-            restrictions: { isMuted: false, isBidBanned: false, isKicked: false }
+            restrictions: {
+              isMuted: !!persistedRestrictions?.isMuted,
+              isBidBanned: !!persistedRestrictions?.isBidBanned,
+              isKicked: false
+            }
         });
-        const indexRef = ref(db, `rooms/${roomId}/audience_index/${uId}`); //EFF CHANGE
-        const indexSnap = await get(indexRef); //EFF CHANGE
-        const firstSeen = indexSnap.exists() ? indexSnap.val().firstSeen : Date.now(); //EFF CHANGE
 
         await update(indexRef, { //EFF CHANGE
             userId: uId,
