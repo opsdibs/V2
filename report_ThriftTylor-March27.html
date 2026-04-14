@@ -1,0 +1,141 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ThriftTylor-March27 Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0a0a0a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+        .card { background: #151515; padding: 20px; border-radius: 12px; border: 1px solid #333; text-align: center; }
+        .val { font-size: 24px; font-weight: bold; color: #fff; margin-top: 5px; }
+        .lbl { font-size: 11px; text-transform: uppercase; color: #888; letter-spacing: 1px; }
+        .highlight { color: #FF6600; }
+        .positive { color: #00ff9d; }
+        
+        .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        
+        .box { background: #151515; border: 1px solid #333; padding: 20px; border-radius: 12px; }
+        h2 { font-size: 14px; text-transform: uppercase; color: #888; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;}
+        
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        td, th { padding: 10px; text-align: left; border-bottom: 1px solid #2a2a2a; }
+        th { color: #666; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px;">
+        <div>
+            <h1 style="color:#FF6600; margin:0;">ThriftTylor-March27 <span style="color:#fff; font-weight:300;">ANALYTICS</span></h1>
+            <p style="color:#666; font-size:12px; margin-top:5px;">27/3/2026, 5:58:29 pm — 27/3/2026, 9:07:02 pm</p>
+        </div>
+        <div style="text-align:right;">
+            <div style="font-size:32px; font-weight:bold; color:#fff;">₹6,570</div>
+            <div style="font-size:11px; color:#888; text-transform:uppercase;">Total Revenue</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card"><div class="lbl">Real Users</div><div class="val">35</div></div>
+        <div class="card"><div class="lbl">Auction Items Sold</div><div class="val">84%</div></div>
+        <div class="card"><div class="lbl">Total Bids</div><div class="val">97</div></div>
+        <div class="card"><div class="lbl">Avg Viewers (Live)</div><div class="val">8</div></div>
+        
+        <div class="card"><div class="lbl">Avg Price Increase</div><div class="val positive">+0%</div></div>
+        <div class="card"><div class="lbl">Highest Increase</div><div class="val positive">+0%</div></div>
+        <div class="card"><div class="lbl">Active Bidders</div><div class="val">13 <span style="color:#666; font-size:12px">/ 35</span></div></div>
+        <div class="card"><div class="lbl">Items Showcased</div><div class="val">19</div></div>
+        <div class="card"><div class="lbl">Live Sell Sessions</div><div class="val">0</div></div>
+        <div class="card"><div class="lbl">Live Sell Bookings</div><div class="val">0</div></div>
+        <div class="card"><div class="lbl">Live Sell Revenue</div><div class="val highlight">INR 0</div></div>
+    </div>
+
+    <div class="box" style="margin-bottom: 20px;">
+        <h2>Event Pulse (5 min intervals)</h2>
+        <canvas id="pulseChart" height="70"></canvas>
+    </div>
+
+    <div class="charts-row">
+        <div class="box" style="display: flex; flex-direction: column; align-items: center;">
+            <h2>Audience Composition</h2>
+            <div style="width: 220px;"><canvas id="splitChart"></canvas></div>
+        </div>
+        <div class="box" style="display: flex; flex-direction: column; align-items: center;">
+            <h2>Bidder Participation</h2>
+            <div style="width: 220px;"><canvas id="participationChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="section-grid">
+        <div class="box">
+            <h2>Items & Sold Price</h2>
+            <table>
+                <tr><th>Item</th><th>Sold Price</th></tr>
+                <tr><td>Comet</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>New balance</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Puma </td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Airmax</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Nike </td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Nike</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Asics </td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>On cloud</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>New balance </td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Jordan</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Nike Dual Tone </td><td style="color:#FF6600">₹635</td></tr><tr><td>Puma Retro</td><td style="color:#FF6600">₹315</td></tr><tr><td>Terra-Block</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Adidas Slate Track</td><td style="color:#FF6600">₹425</td></tr><tr><td>Helix Rally</td><td style="color:#FF6600">₹380</td></tr><tr><td>Dustcore</td><td style="color:#FF6600">₹285</td></tr><tr><td>Cubs Pinstripe</td><td style="color:#FF6600">₹355</td></tr><tr><td>The North Face</td><td style="color:#FF6600">₹530</td></tr><tr><td>Bareline</td><td style="color:#FF6600">₹735</td></tr><tr><td>Orbit Panel</td><td style="color:#FF6600">₹335</td></tr><tr><td>Dickies Stormguard</td><td style="color:#FF6600">₹315</td></tr><tr><td>Tottenham Hotspur</td><td style="color:#FF6600">₹355</td></tr><tr><td>SandTouch</td><td style="color:#FF6600">₹455</td></tr><tr><td>Gridveil</td><td style="color:#FF6600">₹375</td></tr><tr><td>Nosupone</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Polo</td><td style="color:#777; text-transform:uppercase; letter-spacing:1px;">Not Sold</td></tr><tr><td>Stanley Vintage</td><td style="color:#FF6600">₹310</td></tr><tr><td>Nightzip</td><td style="color:#FF6600">₹335</td></tr><tr><td>Urban Gaurd</td><td style="color:#FF6600">₹430</td></tr>
+            </table>
+        </div>
+
+        <div class="box">
+            <h2>🚫 Unsold Items</h2>
+             <table>
+                <tr><th>Item</th><th>Start Price</th></tr>
+                <tr><td>Terra-Block</td><td>₹0</td></tr><tr><td>Nosupone</td><td>₹0</td></tr><tr><td>Polo</td><td>₹0</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="section-grid">
+        <div class="box">
+            <h2>Live Sell Bookings (Per Item)</h2>
+            <table>
+                <tr><th>Item</th><th>Bookings</th><th>Revenue</th></tr>
+                <tr><td colspan="3" style="text-align:center; padding:20px; color:#555">No live sell bookings</td></tr>
+            </table>
+        </div>
+        <div class="box">
+            <h2>Live Sell Summary</h2>
+            <table>
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Total Live Sell Sessions</td><td>0</td></tr>
+                <tr><td>Total Live Sell Bookings</td><td>0</td></tr>
+                <tr><td>Live Sell Revenue</td><td>INR 0</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        new Chart(document.getElementById('pulseChart'), {
+            type: 'line',
+            data: {
+                labels: ["05:58 pm","06:03 pm","06:08 pm","06:13 pm","06:18 pm","06:23 pm","06:28 pm","06:33 pm","06:38 pm","06:43 pm","06:48 pm","06:53 pm","06:58 pm","07:03 pm","07:08 pm","07:13 pm","07:18 pm","07:23 pm","07:28 pm","07:33 pm","07:38 pm","07:43 pm","07:48 pm","07:53 pm","07:58 pm","08:03 pm","08:08 pm","08:13 pm","08:18 pm","08:23 pm","08:28 pm","08:33 pm","08:38 pm","08:43 pm","08:48 pm","08:53 pm","08:58 pm","09:03 pm"],
+                datasets: [
+                    { label: 'Bids', data: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,22,11,8,35,9,3,6,3,0,0,0,0], borderColor: '#00ccff', tension: 0.4 },
+                    { label: 'New Joins', data: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15,8,1,3,0,0,2,2,1,2,0,1,0,0], borderColor: '#FF6600', borderDash: [5,5], tension: 0.4 }
+                ]
+            },
+            options: { scales: { y: { grid: { color: '#222'} }, x: { grid: { color: '#222'} } }, plugins: { legend: { labels: { color: '#ccc' } } } }
+        });
+
+        new Chart(document.getElementById('splitChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Bidders', 'Spectators'],
+                datasets: [{ data: [35, 0], backgroundColor: ['#FF6600', '#333'], borderWidth: 0 }]
+            },
+            options: { plugins: { legend: { position: 'bottom', labels: { color: '#ccc' } } } }
+        });
+
+        new Chart(document.getElementById('participationChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Active Bidders', 'Passive Bidders'],
+                datasets: [{ data: [13, 22], backgroundColor: ['#00ccff', '#333'], borderWidth: 0 }]
+            },
+            options: { plugins: { legend: { position: 'bottom', labels: { color: '#ccc' } } } }
+        });
+    </script>
+</body>
+</html>
+        
