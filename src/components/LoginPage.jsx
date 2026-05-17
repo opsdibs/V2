@@ -471,7 +471,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
   };
 
   return (
-    <div className="w-full h-screen bg-[#FF6600] text-white relative overflow-hidden font-sans">
+    <div className="w-full h-screen bg-[#FF6600] text-white relative overflow-hidden font-ppmori">
       <AnimatePresence mode="wait">
         
         {/* SCREEN 1: SPLASH */}
@@ -508,25 +508,25 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                     >
                     DIBS!
                     </h1>
-                    <p className="text-sm font-bold tracking-[0.3em] text-white uppercase font-sans opacity-90">
-                    ONE PIECE ONE CHANGE
+                    <p className="text-sm font-bold tracking-[0.22em] text-white uppercase font-sans opacity-90">
+                    ONE PIECE ONE CHANCE
                     </p>
 
                     <div className="w-full max-w-xs mt-12 space-y-4">
                         <input
                             type="email"
-                            placeholder="EMAIL ADDRESS"
+                            placeholder="Email Address"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60"
+                            className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60"
                         />
                         
                         <input
                             type="text"
-                            placeholder="PHONE NUMBER"
+                            placeholder="Phone Number"
                             value={authKey}
                             onChange={(e) => setAuthKey(e.target.value)}
-                            className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors uppercase placeholder:text-white/60"
+                            className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60"
                         />
 
                         <AnimatePresence>
