@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X, Settings } from 'lucide-react'; // CHANGE
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X, Settings, Bell, BellOff } from 'lucide-react'; // CHANGE
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get, query, limitToLast } from "firebase/database"; //EFF CHANGE
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
@@ -89,6 +89,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [liveSellEndTime, setLiveSellEndTime] = useState(0);
   const [liveSellPrice, setLiveSellPrice] = useState(0);
   const [showModePicker, setShowModePicker] = useState(false);
+  const [commentAlertsEnabled, setCommentAlertsEnabled] = useState(true);
   const [upiConfig, setUpiConfig] = useState({ upiId: "", payeeName: "", notePrefix: "" });
 
   // CHANGE: current item becomes a snapshot object (static/custom)
@@ -124,12 +125,62 @@ const currentItemRef = useRef(null);
 
   const stopAuctionTriggeredRef = useRef(false);
   const stopLiveSellTriggeredRef = useRef(false);
+  const seenChatIdsRef = useRef(new Set());
+  const didPrimeChatRef = useRef(false);
+  const lastCommentAlertAtRef = useRef(0);
 
   // For enforcing bans/kicks
   const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false, isKicked: false }); // changes
   const searchParams = new URLSearchParams(window.location.search);
   const persistentDbKey = searchParams.get('dbKey');
   const persistentUserId = searchParams.get('uid');
+
+  useEffect(() => {
+    if (!(isHost || isModerator)) return;
+    try {
+      const stored = window.localStorage.getItem("dibs_comment_alerts_enabled");
+      if (stored === "0") setCommentAlertsEnabled(false);
+      if (stored === "1") setCommentAlertsEnabled(true);
+    } catch {}
+  }, [isHost, isModerator]);
+
+  const persistCommentAlertsEnabled = (nextEnabled) => {
+    setCommentAlertsEnabled(nextEnabled);
+    try {
+      window.localStorage.setItem("dibs_comment_alerts_enabled", nextEnabled ? "1" : "0");
+    } catch {}
+  };
+
+  const triggerCommentAlert = () => {
+    const now = Date.now();
+    if (now - lastCommentAlertAtRef.current < 1200) return;
+    lastCommentAlertAtRef.current = now;
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.13);
+        setTimeout(() => {
+          try { ctx.close(); } catch {}
+        }, 250);
+      }
+    } catch {}
+
+    try {
+      if (navigator?.vibrate) navigator.vibrate(80);
+    } catch {}
+  };
 
     useEffect(() => {
   const chatRef = query(ref(db, `rooms/${roomId}/chat`), limitToLast(50)); //EFF CHANGE
@@ -147,8 +198,34 @@ const currentItemRef = useRef(null);
   // CHANGE: custom items live in DB per-room
   const customItemsRef = ref(db, `rooms/${roomId}/customItems`);
   const unsubChat = onValue(chatRef, (snapshot) => { //EFF CHANGE
-    const data = snapshot.val();
-    if (data) setMessages(Object.values(data));
+    const data = snapshot.val() || {};
+    const entries = Object.entries(data).map(([id, value]) => ({ _id: id, ...value }));
+    const nextMessages = entries.map((entry) => {
+      const { _id, ...msg } = entry;
+      return msg;
+    });
+    setMessages(nextMessages);
+
+    if (isHost || isModerator) {
+      const newlyArrivedComments = entries.filter((entry) => {
+        if (seenChatIdsRef.current.has(entry._id)) return false;
+        return entry.type === "msg";
+      });
+
+      entries.forEach((entry) => seenChatIdsRef.current.add(entry._id));
+
+      if (didPrimeChatRef.current && commentAlertsEnabled) {
+        const hasExternalComment = newlyArrivedComments.some((entry) => {
+          const role = entry.role || "";
+          if (role === "host" || role === "moderator") return false;
+          if (entry.user && entry.user === username) return false;
+          return true;
+        });
+        if (hasExternalComment) triggerCommentAlert();
+      }
+    }
+
+    didPrimeChatRef.current = true;
   });
 
   const unsubPinned = onValue(pinnedRef, (snapshot) => {
@@ -360,7 +437,7 @@ const currentItemRef = useRef(null);
     unsubItem();
     unsubCustomItems();
   };
-}, [roomId]);
+}, [roomId, isHost, isModerator, commentAlertsEnabled, username]);
 
 
   // --- SYNC USERNAME ---
@@ -1177,9 +1254,23 @@ const bookLiveSell = async () => {
       
       {/* TOP CENTER: VIEWERS */}
       <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
-          <div className={`${glassSurface} ${glassHighlight} rounded-full px-3 py-1 flex items-center gap-2`}>
-              <Eye className="w-3 h-3 text-red-500 animate-pulse" />
-              <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
+          <div className="flex items-center gap-2">
+              {(isHost || isModerator) && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowModePicker((prev) => !prev)}
+                    className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
+                    title="Quick Settings"
+                    aria-label="Quick Settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              <div className={`${glassSurface} ${glassHighlight} rounded-full px-3 py-1 flex items-center gap-2`}>
+                <Eye className="w-3 h-3 text-red-500 animate-pulse" />
+                <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
+              </div>
           </div>
       </div>
 
@@ -1238,57 +1329,6 @@ const bookLiveSell = async () => {
               </motion.div>
           )}
       </div>
-
-      {/* HOST: SALE MODE ABOVE GO LIVE */}
-      {isHost && (
-        <div
-          className="absolute right-4 z-[70] pointer-events-auto"
-          style={{ bottom: saleModeButtonBottom }}
-        >
-          <div className="relative flex flex-col items-center gap-1">
-            <button
-              onClick={() => setShowModePicker((prev) => !prev)}
-              disabled={!canSwitchMode}
-              className={`h-9 w-9 rounded-full flex items-center justify-center transition-all shadow-lg pointer-events-auto border ${
-                canSwitchMode
-                  ? 'bg-black/70 text-white border-white/20 hover:bg-white/10'
-                  : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
-              }`}
-              title="Sale Mode"
-              aria-label="Sale Mode"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-
-            {showModePicker && (
-              <div className="absolute bottom-full mb-2 flex flex-col gap-1 p-1 rounded-xl bg-black/80 border border-white/10 shadow-xl">
-                <button
-                  type="button"
-                  onClick={() => setSaleModeInDb('auction')}
-                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
-                    saleMode === 'auction'
-                      ? 'bg-[#FF6600] text-white'
-                      : 'bg-white/5 text-white/70 hover:bg-white/10'
-                  }`}
-                >
-                  Live Auction
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSaleModeInDb('live_sell')}
-                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors ${
-                    saleMode === 'live_sell'
-                      ? 'bg-[#FF6600] text-white'
-                      : 'bg-white/5 text-white/70 hover:bg-white/10'
-                  }`}
-                >
-                  Live Sell
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* HOST: SALE START BELOW GO LIVE */}
       {isHost && (
@@ -1641,6 +1681,75 @@ const bookLiveSell = async () => {
         )}
       </div>
     </div>       
+    {showModePicker && (
+      <div className="absolute inset-0 z-[85] bg-black/70 backdrop-blur-sm pointer-events-auto flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-zinc-900 border border-white/10 rounded-2xl p-4 shadow-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-white">Quick Settings</span>
+            <button
+              type="button"
+              onClick={() => setShowModePicker(false)}
+              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+              aria-label="Close quick settings"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="mt-3 space-y-3">
+            {isHost && (
+              <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">Selling Mode</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSaleModeInDb('auction')}
+                    disabled={!canSwitchMode}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest ${
+                      saleMode === 'auction' ? 'bg-[#FF6600] text-white' : 'bg-black/40 text-zinc-300 border border-white/10'
+                    } ${!canSwitchMode ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/10'}`}
+                  >
+                    Live Auction
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSaleModeInDb('live_sell')}
+                    disabled={!canSwitchMode}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest ${
+                      saleMode === 'live_sell' ? 'bg-[#FF6600] text-white' : 'bg-black/40 text-zinc-300 border border-white/10'
+                    } ${!canSwitchMode ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/10'}`}
+                  >
+                    Live Sell
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">Comment Notifications</div>
+              <button
+                type="button"
+                onClick={() => persistCommentAlertsEnabled(!commentAlertsEnabled)}
+                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 flex items-center justify-between hover:bg-white/10 transition-colors"
+              >
+                <span className="text-xs font-semibold text-white">{commentAlertsEnabled ? 'On' : 'Off'}</span>
+                <span
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    commentAlertsEnabled ? 'bg-[#FF6600]' : 'bg-white/20'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                      commentAlertsEnabled ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 };
