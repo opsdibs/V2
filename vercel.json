@@ -1,12 +1,15 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/app",
-      "destination": "/index.html"
+      "handle": "filesystem"
     },
     {
-      "source": "/app/(.*)",
-      "destination": "/index.html"
+      "src": "^/app$",
+      "dest": "/index.html"
+    },
+    {
+      "src": "^/app/(.*)$",
+      "dest": "/index.html"
     }
   ]
 }
