@@ -503,7 +503,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                 <div className="flex-1 flex flex-col items-center justify-center w-full relative px-6 space-y-2">
                     
                     <h1 
-                        className="text-9xl font-retro font-black leading-[1] tracking-tight text-white select-none mix-blend-normal"
+                        className="text-9xl font-retro leading-[1] tracking-tight text-white select-none mix-blend-normal"
                         style={{ textShadow: '8px 8px 0px #000000' }}
                     >
                     DIBS!
@@ -518,7 +518,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                             placeholder="EMAIL ADDRESS"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-white/20 border-b-2 border-white text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 transition-colors placeholder:text-white/60"
+                            className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60"
                         />
                         
                         <input
@@ -526,7 +526,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                             placeholder="PHONE NUMBER"
                             value={authKey}
                             onChange={(e) => setAuthKey(e.target.value)}
-                            className="w-full bg-white/20 border-b-2 border-white text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 transition-colors uppercase placeholder:text-white/60"
+                            className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors uppercase placeholder:text-white/60"
                         />
 
                         <AnimatePresence>
@@ -546,7 +546,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                         <button 
                             onClick={handleSmartLogin}
                             disabled={loading}
-                            className="w-full py-4 border-2 border-white hover:bg-white hover:text-[#FF6600] transition-colors flex flex-col items-center gap-2 group mt-4"
+                            className="w-full py-4 border-2 border-white rounded-xl hover:bg-white hover:text-[#FF6600] transition-colors flex flex-col items-center gap-2 group mt-4"
                         >
                             {loading ? (
                                 <span className="font-mono text-[10px] tracking-widest uppercase font-bold animate-pulse">CHECKING STATUS...</span>
