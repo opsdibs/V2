@@ -4,6 +4,10 @@
       "handle": "filesystem"
     },
     {
+      "src": "^/app/assets/(.*)$",
+      "dest": "/assets/$1"
+    },
+    {
       "src": "^/app$",
       "dest": "/index.html"
     },
