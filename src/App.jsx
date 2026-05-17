@@ -5,7 +5,7 @@ import { LiveRoom } from './components/LiveRoom';
 
 function App() {
   return (
-    <Router>
+    <Router basename="/app">
       <Routes>
         {/* MODULE 1 CHANGE: Root now points to Unified Login Page */}
         <Route path="/" element={<LoginPage />} />
