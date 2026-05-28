@@ -467,8 +467,8 @@ const switchCamera = async () => {
       {/* LAYER 3: SYSTEM CONTROLS */}
       <div className={`absolute inset-0 z-50 pointer-events-none p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex flex-col justify-between max-w-md mx-auto w-full transition-opacity duration-200 ${isOverlayHidden ? 'opacity-0 invisible' : 'opacity-100 visible'}`}>
         
-        <div className="flex justify-between items-start pointer-events-auto">
-            <div className="flex flex-col items-start gap-0.5">
+        <div className="flex justify-between items-start pointer-events-none">
+            <div className="flex flex-col items-start gap-0.5 pointer-events-auto">
                 <img src="/Dibs. (1).svg" alt="Dibs" className="w-28 -ml-4 -mt-7 block"/>
                 <div className={`-mt-5 px-2 py-0.5 rounded-sm flex items-center gap-2 ${isStreaming ? 'bg-red-600' : 'bg-neutral-800'}`}>
                     <span className="font-display font-black text-xs camelcase tracking-widest text-white">
@@ -476,8 +476,8 @@ const switchCamera = async () => {
                     </span>
                 </div>
             </div>
-            
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 pointer-events-auto">
                  {isModerator && (
                      <button 
                         onClick={() => setShowModPanel(!showModPanel)} 
