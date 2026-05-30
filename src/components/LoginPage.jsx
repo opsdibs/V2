@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, AlertCircle, Lock } from 'lucide-react';
+import { ArrowRight, AlertCircle, Lock, ShieldCheck } from 'lucide-react';
 import { ref, push, set, get, update } from 'firebase/database';
-import { db } from '../lib/firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { db, auth } from '../lib/firebase';
 import { logEvent } from '../lib/analytics';
 import { NAME_LIST } from '../lib/username_list';
 
@@ -214,8 +215,84 @@ export const LoginPage = () => {
   const [authKey, setAuthKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  
+
+  // OTP State
+  const [otp, setOtp] = useState("");
+  const [confirmation, setConfirmation] = useState(null); // Firebase confirmationResult
+  const [pendingJoin, setPendingJoin] = useState(null);   // joinRoom args, held until OTP passes
+  const [otpPhone, setOtpPhone] = useState("");           // 10-digit number for display
+  const recaptchaRef = useRef(null);
+
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  // --- OTP: send a code to +91<phone>, then show the verify screen ---
+  const sendOtp = async (joinArgs, cleanPhone) => {
+    try {
+      // Fresh invisible reCAPTCHA each send (token is single-use)
+      try { recaptchaRef.current?.clear(); } catch (e) { /* noop */ }
+      recaptchaRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+
+      const result = await signInWithPhoneNumber(auth, `+91${cleanPhone}`, recaptchaRef.current);
+      setConfirmation(result);
+      setPendingJoin(joinArgs);
+      setOtpPhone(cleanPhone);
+      setOtp("");
+      setError("");
+      setCurrentScreen('otp');
+    } catch (err) {
+      console.error('OTP send failed', err);
+      logEvent(roomId, 'OTP_SEND_FAILED', { phone: cleanPhone, code: err?.code || 'unknown' });
+      setError("Couldn't send the code. Check the number and try again.");
+      try { recaptchaRef.current?.clear(); } catch (e) { /* noop */ }
+      recaptchaRef.current = null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- OTP: verify the code, then complete the original join ---
+  const verifyOtp = async () => {
+    if (!confirmation || !pendingJoin) return;
+    const code = otp.trim();
+    if (code.length < 6) { setError("Enter the 6-digit code."); return; }
+
+    setLoading(true);
+    setError("");
+    try {
+      await confirmation.confirm(code);
+      logEvent(roomId, 'OTP_VERIFIED', { phone: otpPhone });
+
+      // --- TIME GATE: now runs AFTER the phone is verified ---
+      const config = pendingJoin.config;
+      if (config) {
+        const now = new Date();
+        const start = new Date(config.startTime);
+        const end = new Date(config.endTime);
+
+        if (config.isMaintenanceMode) {
+          setWaitingMessage("SYSTEM UNDER MAINTENANCE.");
+          setCurrentScreen('waiting'); setLoading(false); return;
+        }
+        if (now < start) {
+          setWaitingMessage("WAIT FOR THE NEXT DROP.");
+          setNextEventTime(config.startTime);
+          setCurrentScreen('waiting'); setLoading(false); return;
+        }
+        if (now > end) {
+          setWaitingMessage("THIS EVENT HAS ENDED.");
+          setCurrentScreen('waiting'); setLoading(false); return;
+        }
+      }
+
+      const { role, uId, phone, mail, username } = pendingJoin;
+      await joinRoom(role, uId, phone, mail, username);
+    } catch (err) {
+      console.error('OTP verify failed', err);
+      logEvent(roomId, 'OTP_VERIFY_FAILED', { phone: otpPhone, code: err?.code || 'unknown' });
+      setError("Invalid or expired code.");
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
       // If URL param is present, strictly obey it (Manual Override)
@@ -378,29 +455,9 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
     }
   }
 
-  // --- 6. TIME GATE (Applies to all entrants) ---
-  if (configSnap.exists()) {
-    const config = configSnap.val();
-    const now = new Date();
-    const start = new Date(config.startTime);
-    const end = new Date(config.endTime);
-
-    if (config.isMaintenanceMode) {
-      setWaitingMessage("SYSTEM UNDER MAINTENANCE.");
-      setCurrentScreen('waiting'); setLoading(false); return;
-    }
-    if (now < start) {
-      setWaitingMessage("WAIT FOR THE NEXT DROP.");
-      setNextEventTime(config.startTime);
-      setCurrentScreen('waiting'); setLoading(false); return;
-    }
-    if (now > end) {
-      setWaitingMessage("THIS EVENT HAS ENDED.");
-      setCurrentScreen('waiting'); setLoading(false); return;
-    }
-  }
-
-  // --- 7. OPEN ACCESS: allow anyone with valid email/phone to join as audience ---
+  // --- 6. OPEN ACCESS: record the entrant, then verify the phone via OTP ---
+  // NOTE: The time gate (waiting/timer) is intentionally applied AFTER OTP,
+  // inside verifyOtp — so the buyer verifies their number before any timer.
   const isOnGuestList = guestSnap.exists();
   const guestEmail = isOnGuestList ? String(guestSnap.val()?.email || "").toLowerCase() : "";
   const isEmailMatch = isOnGuestList ? guestEmail === inputEmail : false;
@@ -419,9 +476,15 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
     });
   }
 
+  const eventConfig = configSnap.exists() ? configSnap.val() : null;
   const uniqueName = await getUniqueUsername(roomId, cleanPhone);
-  logEvent(roomId, 'LOGIN_SUCCESS', { role: 'audience', phone: cleanPhone, guest: isOnGuestList, emailMatch: isEmailMatch });
-  await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
+  // Send OTP first. joinRoom + time gate only run after the code is confirmed (see verifyOtp).
+  logEvent(roomId, 'OTP_SENT', { phone: cleanPhone, guest: isOnGuestList, emailMatch: isEmailMatch });
+  await sendOtp(
+    { role: 'audience', uId: `USER-${cleanPhone}`, phone: cleanPhone, mail: inputEmail, username: uniqueName, config: eventConfig },
+    cleanPhone
+  );
+  return;
 } catch (err) {
   console.error(err);
   setError("System Error. Try again.");
@@ -562,7 +625,96 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
 
             </motion.div>
         )}
+
+        {/* SCREEN 4: OTP VERIFICATION */}
+        {currentScreen === 'otp' && (
+            <motion.div
+                key="otp"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center w-full h-full px-6 z-20 relative"
+            >
+                <div className="flex-1 flex flex-col items-center justify-center w-full relative px-6 space-y-2">
+                    <ShieldCheck className="w-12 h-12 text-white mb-2" />
+                    <h1 className="text-5xl font-retro leading-[1] tracking-tight text-white select-none text-center"
+                        style={{ textShadow: '6px 6px 0px #000000' }}>
+                        VERIFY
+                    </h1>
+                    <p className="text-xs font-bold tracking-[0.18em] text-white uppercase font-sans opacity-90 text-center">
+                        Code sent to +91 {otpPhone}
+                    </p>
+
+                    <div className="w-full max-w-xs mt-10 space-y-4">
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            placeholder="6-digit code"
+                            value={otp}
+                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                            className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white text-center text-2xl tracking-[0.5em] py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60 placeholder:text-base placeholder:tracking-normal"
+                        />
+
+                        <AnimatePresence>
+                            {error && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="flex items-center justify-center gap-2 text-white bg-black/20 p-2 border border-white/20"
+                                >
+                                    <AlertCircle className="w-3 h-3" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">{error}</span>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        <button
+                            onClick={verifyOtp}
+                            disabled={loading}
+                            className="w-full py-4 border-2 border-white rounded-xl hover:bg-white hover:text-[#FF6600] transition-colors flex flex-col items-center gap-2 group mt-4"
+                        >
+                            {loading ? (
+                                <span className="font-mono text-[10px] tracking-widest uppercase font-bold animate-pulse">VERIFYING...</span>
+                            ) : (
+                                <>
+                                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                    <span className="font-mono text-[10px] tracking-widest uppercase font-bold">CONFIRM CODE</span>
+                                </>
+                            )}
+                        </button>
+
+                        <div className="flex items-center justify-between pt-2">
+                            <button
+                                onClick={() => {
+                                    setCurrentScreen('login');
+                                    setConfirmation(null);
+                                    setPendingJoin(null);
+                                    setOtp("");
+                                    setError("");
+                                }}
+                                className="font-mono text-[10px] tracking-widest uppercase text-white/70 hover:text-white"
+                            >
+                                Change number
+                            </button>
+                            <button
+                                onClick={() => { if (!loading && pendingJoin) { setLoading(true); sendOtp(pendingJoin, otpPhone); } }}
+                                disabled={loading}
+                                className="font-mono text-[10px] tracking-widest uppercase text-white/70 hover:text-white"
+                            >
+                                Resend code
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        )}
       </AnimatePresence>
+
+      {/* Invisible reCAPTCHA host for Firebase Phone Auth (must always exist in DOM) */}
+      <div id="recaptcha-container"></div>
     </div>
   );
 };
