@@ -4,15 +4,7 @@
       "handle": "filesystem"
     },
     {
-      "src": "^/app/assets/(.*)$",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "^/app$",
-      "dest": "/index.html"
-    },
-    {
-      "src": "^/app/(.*)$",
+      "src": "^/(.*)$",
       "dest": "/index.html"
     }
   ]
