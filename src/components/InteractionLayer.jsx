@@ -1543,25 +1543,23 @@ const bookLiveSell = async () => {
       {/* SHARE BUTTON (above heart icon) */}
       <ShareButton />
 
-      {/* TOP LEFT: SETTINGS (host/mod only) */}
-      {(isHost || isModerator) && (
-        <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-4 pointer-events-auto z-[60]">
-          <button
-            onClick={() => setShowModePicker((prev) => !prev)}
-            className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
-            title="Quick Settings"
-            aria-label="Quick Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* TOP CENTER: VIEWER COUNT */}
+      {/* TOP CENTER: SETTINGS (just left of) + VIEWER COUNT */}
       <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
-        <div className={`${glassSurface} ${glassHighlight} rounded-full px-3 py-1 flex items-center gap-2`}>
-          <Eye className="w-3 h-3 text-red-500 animate-pulse" />
-          <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
+        <div className="flex items-center gap-3">
+          {(isHost || isModerator) && (
+            <button
+              onClick={() => setShowModePicker((prev) => !prev)}
+              className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
+              title="Quick Settings"
+              aria-label="Quick Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
+          <div className={`${glassSurface} ${glassHighlight} rounded-full px-3 py-1 flex items-center gap-2`}>
+            <Eye className="w-3 h-3 text-red-500 animate-pulse" />
+            <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
+          </div>
         </div>
       </div>
 
