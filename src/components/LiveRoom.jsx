@@ -280,7 +280,8 @@ useEffect(() => {
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
-              camTrack.play(localContainer, { mirror: true });
+              // Mirror only for front (selfie) camera — matches iPhone Camera app behavior
+              camTrack.play(localContainer, { mirror: cameraFacingMode === "user" });
               setVideoReady(true);
               setStatus("READY TO AIR");
           }
@@ -352,11 +353,11 @@ const switchCamera = async () => {
     await currentTrack.setDevice({ facingMode: nextFacingMode });
     setCameraFacingMode(nextFacingMode);
 
-    // Ensure preview stays non-mirrored after switching
+    // Mirror only for front (selfie) camera — matches iPhone Camera app behavior
     const localContainer = document.getElementById("local-video-container");
     if (localContainer) {
       localContainer.innerHTML = "";
-      currentTrack.play(localContainer, { mirror: true });
+      currentTrack.play(localContainer, { mirror: nextFacingMode === "user" });
     }
   } catch (err) {
     console.error("Camera switch failed", err);

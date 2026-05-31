@@ -425,25 +425,42 @@ const currentItemRef = useRef(null);
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
         const ctx = new AudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.13);
+        const peak = 0.35; // CHANGE: 0.05 → 0.35 (≈7x louder so host hears over video audio)
+
+        // First beep (880 Hz)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(880, ctx.currentTime);
+        gain1.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(peak, ctx.currentTime + 0.01);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.09);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start();
+        osc1.stop(ctx.currentTime + 0.10);
+
+        // Second beep (1175 Hz) after short gap for "ding-ding" distinctiveness
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
+        gain2.gain.setValueAtTime(0.0001, ctx.currentTime + 0.12);
+        gain2.gain.exponentialRampToValueAtTime(peak, ctx.currentTime + 0.13);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.21);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(ctx.currentTime + 0.12);
+        osc2.stop(ctx.currentTime + 0.22);
+
         setTimeout(() => {
           try { ctx.close(); } catch {}
-        }, 250);
+        }, 400);
       }
     } catch {}
 
     try {
-      if (navigator?.vibrate) navigator.vibrate(80);
+      if (navigator?.vibrate) navigator.vibrate(120);
     } catch {}
   };
 
@@ -1526,26 +1543,26 @@ const bookLiveSell = async () => {
       {/* SHARE BUTTON (above heart icon) */}
       <ShareButton />
 
-      {/* TOP CENTER: VIEWERS */}
+      {/* TOP LEFT: SETTINGS (host/mod only) */}
+      {(isHost || isModerator) && (
+        <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-4 pointer-events-auto z-[60]">
+          <button
+            onClick={() => setShowModePicker((prev) => !prev)}
+            className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
+            title="Quick Settings"
+            aria-label="Quick Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* TOP CENTER: VIEWER COUNT */}
       <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
-          <div className="flex items-center gap-2">
-              {(isHost || isModerator) && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowModePicker((prev) => !prev)}
-                    className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
-                    title="Quick Settings"
-                    aria-label="Quick Settings"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-              <div className={`${glassSurface} ${glassHighlight} rounded-full px-3 py-1 flex items-center gap-2`}>
-                <Eye className="w-3 h-3 text-red-500 animate-pulse" />
-                <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
-              </div>
-          </div>
+        <div className={`${glassSurface} ${glassHighlight} rounded-full px-3 py-1 flex items-center gap-2`}>
+          <Eye className="w-3 h-3 text-red-500 animate-pulse" />
+          <span className="text-xs font-display font-bold text-white tabular-nums">{viewerCount}</span>
+        </div>
       </div>
 
       {/* TOP RIGHT: STATS (Unchanged) */}
