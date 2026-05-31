@@ -8,6 +8,17 @@ import { db, auth } from '../lib/firebase';
 import { logEvent } from '../lib/analytics';
 import { NAME_LIST } from '../lib/username_list';
 
+// --- USER CLICK SOUND (plays on every tap of inputs / buttons in login flow) ---
+const CLICK_SOUND_SRC = '/sounds/user-click.wav';
+const CLICK_SOUND_VOLUME = 0.55;
+const playClickSound = () => {
+  try {
+    const audio = new Audio(CLICK_SOUND_SRC);
+    audio.volume = CLICK_SOUND_VOLUME;
+    audio.play().catch(() => {});
+  } catch {}
+};
+
 // --- 1. COIN STACK ANIMATION (Unchanged) ---
 const CoinStackLoader = ({ onComplete }) => {
   const [coinCount, setCoinCount] = useState(0);
@@ -581,14 +592,16 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                             placeholder="Email Address"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            onClick={playClickSound}
                             className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60"
                         />
-                        
+
                         <input
                             type="text"
                             placeholder="Phone Number"
                             value={authKey}
                             onChange={(e) => setAuthKey(e.target.value)}
+                            onClick={playClickSound}
                             className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white text-center py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60"
                         />
 
@@ -606,8 +619,8 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                             )}
                         </AnimatePresence>
 
-                        <button 
-                            onClick={handleSmartLogin}
+                        <button
+                            onClick={() => { playClickSound(); handleSmartLogin(); }}
                             disabled={loading}
                             className="w-full py-4 border-2 border-white rounded-xl hover:bg-white hover:text-[#FF6600] transition-colors flex flex-col items-center gap-2 group mt-4"
                         >
@@ -654,6 +667,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                             placeholder="6-digit code"
                             value={otp}
                             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                            onClick={playClickSound}
                             className="w-full bg-white/20 border-2 border-white/70 rounded-xl text-white text-center text-2xl tracking-[0.5em] py-4 focus:outline-none focus:bg-white/30 focus:border-white transition-colors placeholder:text-white/60 placeholder:text-base placeholder:tracking-normal"
                         />
 
@@ -672,7 +686,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                         </AnimatePresence>
 
                         <button
-                            onClick={verifyOtp}
+                            onClick={() => { playClickSound(); verifyOtp(); }}
                             disabled={loading}
                             className="w-full py-4 border-2 border-white rounded-xl hover:bg-white hover:text-[#FF6600] transition-colors flex flex-col items-center gap-2 group mt-4"
                         >
