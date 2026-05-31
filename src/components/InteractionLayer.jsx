@@ -1543,8 +1543,8 @@ const bookLiveSell = async () => {
       {/* SHARE BUTTON (above heart icon) */}
       <ShareButton />
 
-      {/* TOP CENTER: SETTINGS (just left of) + VIEWER COUNT */}
-      <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
+      {/* TOP CENTER: SETTINGS (just left of) + VIEWER COUNT — nudged left of center, clear of the DIBS logo */}
+      <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-[calc(50%+3rem)] pointer-events-auto z-[60]">
         <div className="flex items-center gap-3">
           {(isHost || isModerator) && (
             <button
