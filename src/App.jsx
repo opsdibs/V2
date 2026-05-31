@@ -4,7 +4,7 @@ import { LoginPage } from './components/LoginPage';
 import { LiveRoom } from './components/LiveRoom';
 
 const WELCOME_MUSIC_SRC = '/sounds/welcomenote.wav';
-const WELCOME_MUSIC_VOLUME = 0.35;
+const WELCOME_MUSIC_VOLUME = 0.175;
 
 // Background music: plays on welcome/login/OTP, stops when entering a live room.
 // Starts on the user's first tap (mobile browsers block autoplay until then).

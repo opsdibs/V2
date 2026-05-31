@@ -620,7 +620,7 @@ if (inputEmail === HOST_EMAIL && inputKey === HOST_PWD) {
                         </AnimatePresence>
 
                         <button
-                            onClick={() => { playClickSound(); handleSmartLogin(); }}
+                            onClick={(e) => { playClickSound(); handleSmartLogin(e); }}
                             disabled={loading}
                             className="w-full py-4 border-2 border-white rounded-xl hover:bg-white hover:text-[#FF6600] transition-colors flex flex-col items-center gap-2 group mt-4"
                         >
