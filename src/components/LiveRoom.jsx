@@ -429,7 +429,16 @@ const switchCamera = async () => {
       
       {/* LAYER 1: VIDEO */}
       <div className="absolute inset-0 z-0 max-w-md mx-auto w-full bg-black">
-        <div id="local-video-container" className={`w-full h-full ${!isHost ? 'hidden' : ''}`}></div>
+        <div
+          id="local-video-container"
+          className={`w-full h-full ${!isHost ? 'hidden' : ''}`}
+          style={{
+            // Override Agora's auto-mirror on the front (selfie) camera.
+            // Front camera in Agora SDK auto-mirrors regardless of mirror: false,
+            // so we flip the container back via CSS to show the camera sensor as-is.
+            transform: cameraFacingMode === 'user' ? 'scaleX(-1)' : 'none',
+          }}
+        ></div>
         
         {/* FIX: key={streamId} forces a fresh DIV for viewers on stream restart */}
         <div 
