@@ -6,6 +6,7 @@ import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
 import inventoryRaw from '../inventory.csv?raw';
 import { logEvent } from '../lib/analytics';
+import { HeartReactionLayer } from './HeartReactionLayer';
 
 // --- INVENTORY ---
 // --- PARSE INVENTORY FROM CSV ---
@@ -1251,7 +1252,13 @@ const bookLiveSell = async () => {
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden max-w-md mx-auto border-x border-white/5 shadow-2xl">
-      
+
+      {/* HEART REACTIONS (floating taps + button) */}
+      <HeartReactionLayer
+        roomId={roomId}
+        canReact={!restrictions.isMuted && !restrictions.isKicked}
+      />
+
       {/* TOP CENTER: VIEWERS */}
       <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
           <div className="flex items-center gap-2">
