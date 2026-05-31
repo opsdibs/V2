@@ -138,7 +138,7 @@ export const HeartReactionLayer = ({ roomId, canReact = true }) => {
               }}
               animate={{
                 opacity: [0, 1, 1, 0],
-                y: -320,
+                y: -500,
                 x: heart.startX + heart.driftX,
                 rotate: heart.rotation + heart.driftX * 0.6,
               }}
@@ -164,19 +164,23 @@ export const HeartReactionLayer = ({ roomId, canReact = true }) => {
         className={`
           absolute right-4 z-[65] pointer-events-auto
           p-3
-          transition-all
-          ${!canReact ? 'opacity-40 cursor-not-allowed' : 'active:scale-90'}
+          ${!canReact ? 'opacity-40 cursor-not-allowed' : ''}
         `}
         style={{ bottom: 'calc(16rem + env(safe-area-inset-bottom))' }}
       >
-        <Heart
-          strokeWidth={1.5}
-          className={`w-8 h-8 transition-colors duration-200 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)] ${
-            cooldownActive
-              ? 'text-red-500 fill-red-500'
-              : 'text-zinc-400'
-          }`}
-        />
+        <motion.div
+          animate={{ scale: cooldownActive ? [1, 1.45, 1] : 1 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+        >
+          <Heart
+            strokeWidth={1.5}
+            className={`w-6 h-6 transition-colors duration-200 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)] ${
+              cooldownActive
+                ? 'text-red-500 fill-red-500'
+                : 'text-zinc-400'
+            }`}
+          />
+        </motion.div>
       </button>
     </>
   );
