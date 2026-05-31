@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X, Settings, Bell, BellOff } from 'lucide-react'; // CHANGE
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Gavel, Eye, ShoppingBag, Plus, Minus, Trash2, Pin, X, Settings, Bell, BellOff, Heart, Share2 } from 'lucide-react'; // CHANGE
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get, query, limitToLast } from "firebase/database"; //EFF CHANGE
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
 import inventoryRaw from '../inventory.csv?raw';
 import { logEvent } from '../lib/analytics';
-import { HeartReactionLayer } from './HeartReactionLayer';
 
 // --- INVENTORY ---
 // --- PARSE INVENTORY FROM CSV ---
@@ -67,6 +66,271 @@ const glassHighlight =
   "before:content-[''] before:absolute before:inset-0 " +
   "before:bg-gradient-to-b before:from-white/12 before:to-transparent " +
   "before:pointer-events-none";
+
+// =============================================================
+// VIEWER ACTION BUTTONS (right-side floating column)
+// Two small icon buttons stacked above bid controls:
+//   • Share button (top)
+//   • Heart reaction button (below)
+// Heart spawns floating ❤️ that travels up the screen.
+// Share triggers Web Share API with clipboard fallback.
+// =============================================================
+
+// --- HEART REACTION TUNABLES ---
+const REACTION_COOLDOWN_MS = 500;           // ms between taps (per user)
+const REACTION_ANIMATION_MS = 2000;         // float duration
+const REACTION_DB_LIMIT = 10;               // max hearts read at once
+const REACTION_STALE_MS = 5000;             // skip hearts older than this
+const REACTION_DB_TTL_MS = 30000;           // auto-cleanup entries older than this
+const REACTION_CLEANUP_INTERVAL_MS = 10000; // sweep interval
+
+// --- SHARE CONSTANTS ---
+const SHARE_URL = 'https://icalldibs.today';
+const SHARE_TEXT = 'DIBS is live join in and get your pieces right away.';
+const SHARE_TITLE = 'DIBS';
+
+// --- HEART REACTION LAYER (inner component) ---
+const HeartReactionLayer = ({ roomId, canReact = true }) => {
+  const [floatingHearts, setFloatingHearts] = useState([]);
+  const [cooldownActive, setCooldownActive] = useState(false);
+  const lastTapAtRef = useRef(0);
+  const seenIdsRef = useRef(new Set());
+  const isPrimedRef = useRef(false);
+
+  // Subscribe to reactions (limit 10)
+  useEffect(() => {
+    if (!roomId) return;
+    const reactionsQuery = query(
+      ref(db, `rooms/${roomId}/reactions`),
+      limitToLast(REACTION_DB_LIMIT)
+    );
+
+    const unsub = onValue(reactionsQuery, (snapshot) => {
+      const data = snapshot.val() || {};
+      const entries = Object.entries(data);
+
+      // First load: mark seen but don't animate (avoid replay on join)
+      if (!isPrimedRef.current) {
+        entries.forEach(([id]) => seenIdsRef.current.add(id));
+        isPrimedRef.current = true;
+        return;
+      }
+
+      entries.forEach(([id, value]) => {
+        if (seenIdsRef.current.has(id)) return;
+        seenIdsRef.current.add(id);
+
+        const ts = Number(value?.timestamp) || 0;
+        if (Date.now() - ts > REACTION_STALE_MS) return;
+
+        const heart = {
+          id,
+          emoji: typeof value?.emoji === 'string' ? value.emoji : '❤️',
+          startX: Math.random() * 30 - 15,
+          driftX: (Math.random() - 0.5) * 40,
+          scale: 0.9 + Math.random() * 0.2,
+          rotation: (Math.random() - 0.5) * 30,
+          delay: Math.random() * 100,
+        };
+
+        setFloatingHearts((prev) => [...prev, heart]);
+
+        window.setTimeout(() => {
+          setFloatingHearts((prev) => prev.filter((h) => h.id !== id));
+        }, REACTION_ANIMATION_MS + 250);
+      });
+    });
+
+    return () => unsub();
+  }, [roomId]);
+
+  // Periodic cleanup of old DB entries
+  useEffect(() => {
+    if (!roomId) return;
+    const interval = setInterval(async () => {
+      try {
+        const snap = await get(ref(db, `rooms/${roomId}/reactions`));
+        const data = snap.val() || {};
+        const now = Date.now();
+        const expired = Object.entries(data).filter(
+          ([, value]) => now - (Number(value?.timestamp) || 0) > REACTION_DB_TTL_MS
+        );
+        await Promise.all(
+          expired.map(([id]) => remove(ref(db, `rooms/${roomId}/reactions/${id}`)))
+        );
+      } catch {}
+    }, REACTION_CLEANUP_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [roomId]);
+
+  const sendHeart = () => {
+    if (!canReact) return;
+    const now = Date.now();
+    if (now - lastTapAtRef.current < REACTION_COOLDOWN_MS) return;
+    lastTapAtRef.current = now;
+
+    setCooldownActive(true);
+    window.setTimeout(() => setCooldownActive(false), REACTION_COOLDOWN_MS);
+
+    push(ref(db, `rooms/${roomId}/reactions`), {
+      emoji: '❤️',
+      timestamp: now,
+    }).catch(() => {});
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(15);
+      }
+    } catch {}
+  };
+
+  const buttonDisabled = !canReact || cooldownActive;
+
+  return (
+    <>
+      {/* FLOATING HEARTS LAYER */}
+      <div className="absolute inset-0 z-[55] pointer-events-none overflow-hidden">
+        <AnimatePresence>
+          {floatingHearts.map((heart) => (
+            <motion.div
+              key={heart.id}
+              className="absolute right-7 text-3xl select-none"
+              style={{ bottom: 'calc(17rem + env(safe-area-inset-bottom))' }}
+              initial={{
+                opacity: 0,
+                y: 0,
+                x: heart.startX,
+                scale: heart.scale,
+                rotate: heart.rotation,
+              }}
+              animate={{
+                opacity: [0, 1, 1, 0],
+                y: -500,
+                x: heart.startX + heart.driftX,
+                rotate: heart.rotation + heart.driftX * 0.6,
+              }}
+              transition={{
+                duration: REACTION_ANIMATION_MS / 1000,
+                ease: 'easeOut',
+                opacity: { times: [0, 0.1, 0.85, 1] },
+                delay: heart.delay / 1000,
+              }}
+            >
+              {heart.emoji}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* HEART BUTTON */}
+      <button
+        type="button"
+        onClick={sendHeart}
+        disabled={buttonDisabled}
+        aria-label="Send a heart"
+        className={`
+          absolute right-4 z-[65] pointer-events-auto
+          p-3
+          ${!canReact ? 'opacity-40 cursor-not-allowed' : ''}
+        `}
+        style={{ bottom: 'calc(16rem + env(safe-area-inset-bottom))' }}
+      >
+        <motion.div
+          animate={{ scale: cooldownActive ? [1, 1.45, 1] : 1 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+        >
+          <Heart
+            strokeWidth={1.5}
+            className={`w-6 h-6 transition-colors duration-200 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)] ${
+              cooldownActive
+                ? 'text-red-500 fill-red-500'
+                : 'text-white'
+            }`}
+          />
+        </motion.div>
+      </button>
+    </>
+  );
+};
+
+// --- SHARE BUTTON (inner component) ---
+const ShareButton = () => {
+  const [justShared, setJustShared] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+
+  const handleShare = async () => {
+    setJustShared(true);
+    window.setTimeout(() => setJustShared(false), 500);
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(15);
+      }
+    } catch {}
+
+    // Try Web Share API first
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: SHARE_TITLE,
+          text: SHARE_TEXT,
+          url: SHARE_URL,
+        });
+        return;
+      } catch {}
+    }
+
+    // Fallback: clipboard
+    try {
+      await navigator.clipboard.writeText(`${SHARE_TEXT} ${SHARE_URL}`);
+      setShowToast(true);
+      window.setTimeout(() => setShowToast(false), 1800);
+    } catch {}
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={handleShare}
+        aria-label="Share DIBS"
+        className="absolute right-4 z-[65] pointer-events-auto p-3"
+        style={{ bottom: 'calc(19.5rem + env(safe-area-inset-bottom))' }}
+      >
+        <motion.div
+          animate={{ scale: justShared ? [1, 1.45, 1] : 1 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+        >
+          <Share2
+            strokeWidth={1.5}
+            className="w-6 h-6 text-white transition-colors duration-200 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]"
+          />
+        </motion.div>
+      </button>
+
+      {/* "Link copied" toast (clipboard fallback only) */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+            className="absolute right-4 z-[66] pointer-events-none rounded-full backdrop-blur-md bg-black/70 border border-white/15 px-3 py-1.5 text-[10px] font-semibold text-white whitespace-nowrap"
+            style={{ bottom: 'calc(22.5rem + env(safe-area-inset-bottom))' }}
+          >
+            Link copied
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
+// =============================================================
+// MAIN INTERACTION LAYER
+// =============================================================
 
 export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, assignedUsername}) => {
   const [messages, setMessages] = useState([]);
@@ -1258,6 +1522,9 @@ const bookLiveSell = async () => {
         roomId={roomId}
         canReact={!restrictions.isMuted && !restrictions.isKicked}
       />
+
+      {/* SHARE BUTTON (above heart icon) */}
+      <ShareButton />
 
       {/* TOP CENTER: VIEWERS */}
       <div className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto z-[60]">
